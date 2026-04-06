@@ -986,6 +986,51 @@
   }
   #import-banner button.dismiss:hover { background: rgba(255,255,255,0.25); }
 
+  /* ---------- in-app prompt / confirm dialogs ---------- */
+  #kz-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 150;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 80px 16px 40px;
+  }
+  #kz-overlay.open { display: flex; }
+  #kz-overlay .kz-dialog {
+    background: var(--bg-elev);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 440px;
+    overflow: hidden;
+    animation: kz-pop 0.12s ease-out;
+  }
+  @keyframes kz-pop { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  #kz-overlay .kz-header {
+    padding: 14px 18px 4px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  #kz-overlay .kz-message {
+    padding: 4px 18px 14px;
+    font-size: 13px;
+    color: var(--text-mute);
+    line-height: 1.5;
+  }
+  #kz-overlay .kz-input-wrap { padding: 0 18px 14px; }
+  #kz-overlay .kz-footer {
+    display: flex;
+    gap: 8px;
+    padding: 12px 18px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    justify-content: flex-end;
+  }
+  #kz-overlay .kz-footer button { padding: 7px 16px; }
+
   /* ---------- mobile move popover ---------- */
   #move-popover {
     position: fixed;
@@ -1501,6 +1546,20 @@
 
 </div>
 
+<div id="kz-overlay" role="dialog" aria-modal="true">
+  <div class="kz-dialog">
+    <div class="kz-header" id="kz-header"></div>
+    <div class="kz-message" id="kz-message" style="display:none;"></div>
+    <div class="kz-input-wrap" id="kz-input-wrap" style="display:none;">
+      <input type="text" id="kz-input">
+    </div>
+    <div class="kz-footer">
+      <button id="kz-cancel">Cancel</button>
+      <button class="btn-primary" id="kz-ok">OK</button>
+    </div>
+  </div>
+</div>
+
 <div id="move-popover" role="menu" aria-label="Move card to column"></div>
 
 <div id="import-banner">
@@ -1549,6 +1608,64 @@ function debounce(fn, ms){
 function toast(msg){
   const el = $('toast'); el.textContent = msg; el.classList.add('show');
   clearTimeout(toast._t); toast._t = setTimeout(()=>el.classList.remove('show'), 2200);
+}
+
+/* ---------- in-app prompt / confirm (replace native) ---------- */
+let _kzResolve = null;
+function _kzClose(value){
+  $('kz-overlay').classList.remove('open');
+  document.removeEventListener('keydown', _kzKey, true);
+  const r = _kzResolve; _kzResolve = null;
+  if(r) r(value);
+}
+function _kzKey(e){
+  if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); _kzClose(null); }
+  else if(e.key === 'Enter'){
+    const isInput = e.target && e.target.id === 'kz-input';
+    const isTextarea = e.target && e.target.tagName === 'TEXTAREA';
+    if(isInput || !isTextarea){ e.preventDefault(); e.stopPropagation(); $('kz-ok').click(); }
+  }
+}
+function kzPrompt({ title, message='', defaultValue='', placeholder='', okLabel='OK', cancelLabel='Cancel' }){
+  return new Promise(resolve => {
+    _kzResolve = resolve;
+    $('kz-header').textContent = title;
+    const msgEl = $('kz-message');
+    if(message){ msgEl.textContent = message; msgEl.style.display = ''; }
+    else msgEl.style.display = 'none';
+    $('kz-input-wrap').style.display = '';
+    const inp = $('kz-input');
+    inp.value = defaultValue || '';
+    inp.placeholder = placeholder || '';
+    $('kz-cancel').textContent = cancelLabel;
+    $('kz-cancel').className = '';
+    $('kz-ok').textContent = okLabel;
+    $('kz-ok').className = 'btn-primary';
+    $('kz-cancel').onclick = () => _kzClose(null);
+    $('kz-ok').onclick = () => _kzClose(inp.value.trim());
+    $('kz-overlay').classList.add('open');
+    document.addEventListener('keydown', _kzKey, true);
+    setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  });
+}
+function kzConfirm({ title, message='', okLabel='OK', cancelLabel='Cancel', danger=false }){
+  return new Promise(resolve => {
+    _kzResolve = resolve;
+    $('kz-header').textContent = title;
+    const msgEl = $('kz-message');
+    if(message){ msgEl.textContent = message; msgEl.style.display = ''; }
+    else msgEl.style.display = 'none';
+    $('kz-input-wrap').style.display = 'none';
+    $('kz-cancel').textContent = cancelLabel;
+    $('kz-cancel').className = '';
+    $('kz-ok').textContent = okLabel;
+    $('kz-ok').className = danger ? 'btn-danger' : 'btn-primary';
+    $('kz-cancel').onclick = () => _kzClose(false);
+    $('kz-ok').onclick = () => _kzClose(true);
+    $('kz-overlay').classList.add('open');
+    document.addEventListener('keydown', _kzKey, true);
+    setTimeout(() => $('kz-ok').focus(), 30);
+  });
 }
 function slugify(s){
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40) || 'board';
@@ -2535,8 +2652,8 @@ function onColDrop(e, colId){
    Board CRUD
    ============================================================ */
 
-function newBoardPrompt(){
-  const name = prompt('New board name:', 'Untitled board');
+async function newBoardPrompt(){
+  const name = await kzPrompt({ title:'New board', placeholder:'Board name', defaultValue:'Untitled board', okLabel:'Create' });
   if(!name) return;
   const b = newBoard(name);
   S.boards[b.id] = b;
@@ -2547,9 +2664,9 @@ function newBoardPrompt(){
   scheduleSave();
   renderAll();
 }
-function renameBoardPrompt(){
+async function renameBoardPrompt(){
   const b = currentBoard(); if(!b) return;
-  const name = prompt('Board name:', b.name);
+  const name = await kzPrompt({ title:'Rename board', defaultValue: b.name, okLabel:'Rename' });
   if(!name) return;
   b.name = name;
   rebuildBoardOrder();
@@ -2558,7 +2675,7 @@ function renameBoardPrompt(){
 }
 async function deleteBoardConfirm(){
   const b = currentBoard(); if(!b) return;
-  if(!confirm(`Delete board "${b.name}"? This cannot be undone.`)) return;
+  if(!await kzConfirm({ title:`Delete "${b.name}"?`, message:'This cannot be undone.', okLabel:'Delete board', danger:true })) return;
   await maybeAutoSnapshot('destructive');
   await storage.deleteBoard(b);
   delete S.boards[b.id];
@@ -2583,9 +2700,9 @@ function switchBoard(id){
    Column CRUD
    ============================================================ */
 
-function addColumnPrompt(){
+async function addColumnPrompt(){
   const b = currentBoard(); if(!b) return;
-  const name = prompt('Column name:', 'New column');
+  const name = await kzPrompt({ title:'New column', defaultValue:'New column', okLabel:'Add' });
   if(!name) return;
   b.columns.push({ id:uid(), name, wipLimit:0, collapsed:false, cardIds:[] });
   logActivity('col-add', `Added column "${name}"`);
@@ -2608,8 +2725,8 @@ function toggleColumnCollapse(colId){
 async function deleteColumnConfirm(colId){
   const b = currentBoard(); if(!b) return;
   const c = b.columns.find(x => x.id === colId); if(!c) return;
-  if(c.cardIds.length && !confirm(`Delete column "${c.name}" and its ${c.cardIds.length} card(s)?`)) return;
-  if(!c.cardIds.length && !confirm(`Delete column "${c.name}"?`)) return;
+  const msg = c.cardIds.length ? `${c.cardIds.length} card${c.cardIds.length===1?'':'s'} in this column will also be deleted.` : 'This column will be removed.';
+  if(!await kzConfirm({ title:`Delete "${c.name}"?`, message: msg, okLabel:'Delete column', danger:true })) return;
   await maybeAutoSnapshot('destructive');
   for(const cid of c.cardIds) delete b.cards[cid];
   b.columns = b.columns.filter(x => x.id !== colId);
@@ -2621,9 +2738,9 @@ async function deleteColumnConfirm(colId){
    Card CRUD
    ============================================================ */
 
-function addCardPrompt(colId){
+async function addCardPrompt(colId){
   const b = currentBoard(); if(!b) return;
-  const title = prompt('Card title:');
+  const title = await kzPrompt({ title:'New card', placeholder:'What needs doing?', okLabel:'Add card' });
   if(!title) return;
   const card = newCard(title);
   b.cards[card.id] = card;
@@ -2636,7 +2753,7 @@ function addCardPrompt(colId){
 async function deleteCardConfirm(){
   const b = currentBoard(); if(!b || !S.editingCardId) return;
   const card = b.cards[S.editingCardId]; if(!card) return;
-  if(!confirm(`Delete card "${card.title}"?`)) return;
+  if(!await kzConfirm({ title:`Delete "${card.title}"?`, message:'This cannot be undone.', okLabel:'Delete card', danger:true })) return;
   await maybeAutoSnapshot('destructive');
   const col = findColumnByCard(b, card.id);
   if(col) col.cardIds = col.cardIds.filter(x => x !== card.id);
@@ -2786,9 +2903,10 @@ function renderEditorLabels(){
     el.appendChild(pill);
   }
 }
-function newLabelPrompt(){
+async function newLabelPrompt(){
   const b = currentBoard(); if(!b) return;
-  const name = prompt('Label name:'); if(!name) return;
+  const name = await kzPrompt({ title:'New label', placeholder:'Label name', okLabel:'Add label' });
+  if(!name) return;
   const color = LABEL_COLORS[b.labels.length % LABEL_COLORS.length];
   b.labels.push({ id:uid(), name, color });
   renderEditorLabels();
@@ -2811,9 +2929,10 @@ function renderEditorMembers(){
     el.appendChild(pill);
   }
 }
-function newMemberPrompt(){
+async function newMemberPrompt(){
   const b = currentBoard(); if(!b) return;
-  const name = prompt('Member name:'); if(!name) return;
+  const name = await kzPrompt({ title:'New member', placeholder:'Member name', okLabel:'Add member' });
+  if(!name) return;
   b.members.push({ id:uid(), name, color:LABEL_COLORS[b.members.length % LABEL_COLORS.length] });
   renderEditorMembers();
   scheduleSave();
@@ -2842,7 +2961,7 @@ async function onAttachFiles(e){
   const files = [...e.target.files];
   for(const f of files){
     if(f.size > 5*1024*1024){
-      if(!confirm(`"${f.name}" is ${formatBytes(f.size)} — embed it anyway? (Larger files bloat the board JSON.)`)) continue;
+      if(!await kzConfirm({ title:'Large attachment', message:`"${f.name}" is ${formatBytes(f.size)}. Embed it anyway? Larger files bloat the board JSON.`, okLabel:'Embed', danger:false })) continue;
     }
     const dataUrl = await new Promise((res,rej)=>{
       const r = new FileReader(); r.onload = ()=>res(r.result); r.onerror = rej; r.readAsDataURL(f);
@@ -2885,8 +3004,10 @@ function openSettingsModal(){
     const [nameI, wipI, rm] = row.children;
     nameI.dataset.colId = c.id;
     wipI.dataset.colId  = c.id;
-    rm.onclick = () => {
-      if(c.cardIds.length && !confirm(`Column "${c.name}" has ${c.cardIds.length} card(s). Delete?`)) return;
+    rm.onclick = async () => {
+      if(c.cardIds.length){
+        if(!await kzConfirm({ title:`Delete "${c.name}"?`, message:`${c.cardIds.length} card${c.cardIds.length===1?'':'s'} will be deleted.`, okLabel:'Delete column', danger:true })) return;
+      }
       for(const cid of c.cardIds) delete b.cards[cid];
       b.columns = b.columns.filter(x => x.id !== c.id);
       openSettingsModal();
@@ -3021,7 +3142,7 @@ async function onImportFile(e){
   try{ json = JSON.parse(text); }catch(_){ toast('Invalid JSON'); return; }
   const mode = document.querySelector('input[name=import-mode]:checked').value;
   if(mode === 'replace'){
-    if(!confirm('Replace ALL boards with the imported data? This cannot be undone.')) { e.target.value=''; return; }
+    if(!await kzConfirm({ title:'Replace all boards?', message:'This will delete every existing board and import the new ones. This cannot be undone.', okLabel:'Replace', danger:true })){ e.target.value=''; return; }
     for(const id of Object.keys(S.boards)) await storage.deleteBoard(S.boards[id]);
     S.boards = {};
   }
@@ -3303,9 +3424,9 @@ async function takeSnapshot(kind='manual', name=''){
 }
 async function takeSnapshotPrompt(){
   const b = currentBoard(); if(!b) return;
-  const name = prompt('Snapshot name (optional):', '');
-  if(name === null) return;
-  const r = await takeSnapshot('manual', name);
+  const name = await kzPrompt({ title:'Take snapshot', message:'Add an optional name to find it later.', placeholder:'e.g. Sprint 12 kickoff', okLabel:'Take snapshot' });
+  if(name === null) return;   // cancelled
+  const r = await takeSnapshot('manual', name || '');
   if(r){ toast('Snapshot saved'); renderSnapshotsList(); }
 }
 async function maybeAutoSnapshot(reason){
@@ -3436,7 +3557,7 @@ async function renderSnapshotDiff(fnA, fnB){
 }
 async function restoreSnapshot(filename){
   const b = currentBoard(); if(!b) return;
-  if(!confirm('Restore this snapshot? Your current board will be replaced. (A safety snapshot will be taken first.)')) return;
+  if(!await kzConfirm({ title:'Restore snapshot?', message:'Your current board will be replaced. A safety snapshot will be taken first.', okLabel:'Restore', danger:true })) return;
   await takeSnapshot('auto-destructive', 'pre-restore safety');
   const row = await storage.loadSnapshot(filename); if(!row) return;
   const restored = JSON.parse(JSON.stringify(row.data));
@@ -3450,7 +3571,7 @@ async function restoreSnapshot(filename){
   toast('Snapshot restored');
 }
 async function deleteSnapshotConfirm(filename){
-  if(!confirm('Delete this snapshot?')) return;
+  if(!await kzConfirm({ title:'Delete snapshot?', message:'This snapshot will be removed permanently.', okLabel:'Delete', danger:true })) return;
   await storage.deleteSnapshot(filename);
   renderSnapshotsList();
 }
