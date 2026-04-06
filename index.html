@@ -1480,7 +1480,18 @@
 /* ---------- helpers ---------- */
 const $ = id => document.getElementById(id);
 function uid(){ return Math.random().toString(36).slice(2,10).padEnd(8,'0'); }
-function now(){ return Date.now(); }
+function now(){ return new Date().toISOString(); }
+function nowMs(){ return Date.now(); }
+function tsMs(v){
+  if(v == null) return 0;
+  if(typeof v === 'number') return v;
+  return new Date(v).getTime();
+}
+function toIso(v){
+  if(v == null) return null;
+  if(typeof v === 'string') return v;
+  return new Date(v).toISOString();
+}
 function escapeHtml(s){
   return String(s ?? '')
     .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
@@ -1634,11 +1645,11 @@ const StorageIDB = {
     await idbPut('settings', { key:'main', value: settings });
   },
   async saveSnapshot(filename, boardId, snapshotJson){
-    await idbPut('snapshots', { filename, boardId, takenAt: now(), data: snapshotJson });
+    await idbPut('snapshots', { filename, boardId, takenAt: nowMs(), data: snapshotJson });
   },
   async listSnapshots(boardId){
     const rows = await idbAllByIndex('snapshots','boardId',boardId);
-    return rows.sort((a,b)=>b.takenAt - a.takenAt);
+    return rows.sort((a,b)=>tsMs(b.takenAt) - tsMs(a.takenAt));
   },
   async loadSnapshot(filename){
     return idbGet('snapshots', filename);
@@ -1720,7 +1731,7 @@ const StorageFS = {
           }
         }catch(_){ }
       }
-      return rows.sort((a,b)=>b.takenAt - a.takenAt);
+      return rows.sort((a,b)=>tsMs(b.takenAt) - tsMs(a.takenAt));
     }catch(_){ return []; }
   },
   async loadSnapshot(filename){
@@ -1790,7 +1801,7 @@ async function connectFolder(){
     S.storageMode = 'fs';
     // load any existing boards from disk; merge with what's in memory
     const { boards, settings } = await StorageFS.loadAll();
-    for(const id of Object.keys(boards)) S.boards[id] = boards[id];
+    for(const id of Object.keys(boards)) S.boards[id] = migrateLoadedBoard(boards[id]);
     if(settings) S.settings = { ...S.settings, ...settings };
     rebuildBoardOrder();
     // write all current in-memory boards to disk so the folder becomes a complete mirror
@@ -1858,6 +1869,50 @@ function findColumnByCard(board, cardId){
   return board.columns.find(c => c.cardIds.includes(cardId));
 }
 function markDirty(){ S.dirty = true; setSaveIndicator('dirty'); }
+
+/* one-shot migration: bring older board JSON up to current schema */
+function migrateLoadedBoard(b){
+  if(!b || b._migrated_v3) return b;
+  // top-level timestamps
+  b.createdAt = toIso(b.createdAt);
+  if(b._meta){
+    b._meta.lastModified = toIso(b._meta.lastModified);
+  }
+  // cards
+  for(const cid in (b.cards || {})){
+    const card = b.cards[cid];
+    card.createdAt    = toIso(card.createdAt);
+    card.updatedAt    = toIso(card.updatedAt);
+    if(!('lastModifiedBy' in card))  card.lastModifiedBy  = 'Unknown';
+    if(!('lastModifiedAt' in card))  card.lastModifiedAt  = card.updatedAt || null;
+    if(!('createdBy' in card))       card.createdBy       = 'Unknown';
+    for(const c of (card.comments || [])){
+      if(typeof c.ts === 'number'){ c.timestamp = new Date(c.ts).toISOString(); delete c.ts; }
+      if(c.timestamp == null && c.ts != null) c.timestamp = toIso(c.ts);
+    }
+  }
+  // activity log: kind→action, ts→timestamp, add user/cardId
+  if(Array.isArray(b.activity)){
+    const KIND_TO_ACTION = {
+      'card-create':'card_created','card-edit':'card_edited','card-move':'card_moved',
+      'card-delete':'card_deleted','card-comment':'card_commented',
+      'col-add':'column_created','col-rename':'column_renamed','col-delete':'column_deleted',
+      'snapshot':'snapshot_taken','member':'member_added','label':'label_created',
+      'board-rename':'board_renamed','board-create':'board_created'
+    };
+    for(const a of b.activity){
+      if(a.kind && !a.action){ a.action = KIND_TO_ACTION[a.kind] || 'legacy'; delete a.kind; }
+      if(typeof a.ts === 'number'){ a.timestamp = new Date(a.ts).toISOString(); delete a.ts; }
+      if(a.timestamp == null && a.ts) a.timestamp = toIso(a.ts);
+      if(!('user'      in a)) a.user = null;
+      if(!('cardId'    in a)) a.cardId = null;
+      if(!('cardTitle' in a)) a.cardTitle = null;
+      if(!('detail'    in a)) a.detail = a.text ? { text: a.text } : {};
+    }
+  }
+  b._migrated_v3 = true;
+  return b;
+}
 
 /* ============================================================
    Persistence orchestration
@@ -2583,7 +2638,7 @@ function renderEditorComments(){
     const div = document.createElement('div');
     div.className = 'comment-block';
     div.innerHTML = `
-      <div class="who-when"><strong>${escapeHtml(who)}</strong><span>${escapeHtml(relTime(c.ts))}</span>
+      <div class="who-when"><strong>${escapeHtml(who)}</strong><span>${escapeHtml(relTime(c.timestamp || c.ts))}</span>
         <span class="actions"><button title="Delete">✕</button></span>
       </div>
       <div class="body">${mdToHtml(c.text)}</div>`;
@@ -2600,7 +2655,7 @@ function addCommentFromEditor(){
   const who  = $('comment-author').value || '';
   S._lastCommentAuthor = who;
   if(!card.comments) card.comments = [];
-  card.comments.push({ id: uid(), ts: now(), who, text });
+  card.comments.push({ id: uid(), timestamp: now(), who, text });
   $('comment-input').value = '';
   renderEditorComments();
   const member = b.members.find(m => m.id === who);
@@ -3120,12 +3175,14 @@ function snapFilename(board, ts){
   return slugify(board.name) + '_' + board.id.slice(0,4) + '_' + ts + '.kanzen.json';
 }
 function relTime(ts){
-  const s = Math.round((Date.now() - ts) / 1000);
+  const ms = tsMs(ts);
+  if(!ms) return '—';
+  const s = Math.round((Date.now() - ms) / 1000);
   if(s < 60)        return 'just now';
   if(s < 3600)      return Math.floor(s/60) + 'm ago';
   if(s < 86400)     return Math.floor(s/3600) + 'h ago';
   if(s < 86400*7)   return Math.floor(s/86400) + 'd ago';
-  return new Date(ts).toLocaleDateString();
+  return new Date(ms).toLocaleDateString();
 }
 
 async function takeSnapshot(kind='manual', name=''){
@@ -3159,7 +3216,7 @@ async function maybeDailySnapshot(){
   const b = currentBoard(); if(!b) return;
   const list = await storage.listSnapshots(b.id);
   const lastDaily = list.find(s => (s.data?._snapshot?.kind === 'auto-daily'));
-  if(lastDaily && Date.now() - lastDaily.takenAt < 86400000) return;
+  if(lastDaily && Date.now() - tsMs(lastDaily.takenAt) < 86400000) return;
   await takeSnapshot('auto-daily');
 }
 function toggleAutoSnap(which, on){
@@ -3766,6 +3823,7 @@ async function init(){
   try{
     const { boards, settings } = await StorageIDB.loadAll();
     S.boards = boards || {};
+    for(const id in S.boards) migrateLoadedBoard(S.boards[id]);
     if(settings) S.settings = { ...S.settings, ...settings };
   }catch(e){ console.warn('IDB load failed', e); }
 
