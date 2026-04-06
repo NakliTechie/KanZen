@@ -33,7 +33,7 @@ Boards live on your device — as plain `.kanzen.json` files in a folder you cho
 - Snapshots: manual or auto (before destructive actions, optional daily). Compare any two snapshots — card-level diff (added / removed / modified)
 - Undo / redo (`Cmd/Ctrl+Z` and `Shift+Z`), 50-deep per board
 - Activity feed of every change
-- URL sharing: encrypted (AES-GCM 256, PBKDF2 200K) or plain, pako-compressed, with size gate and QR code. The hash fragment never leaves the browser
+- URL sharing: encrypted (AES-GCM 256, PBKDF2 200K) or plain, compressed via the browser-native `CompressionStream` API (no CDN dependency on modern browsers), with size gate and QR code. The hash fragment never leaves the browser. Read-back supports the spec `#e=` format too, so URLs from compatible tools can be imported.
 
 **Storage & interop**
 - File System Access API as the source of truth — pretty-printed, sorted-key JSON for clean git diffs

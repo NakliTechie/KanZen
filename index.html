@@ -1533,7 +1533,7 @@
           <tr><td>📁</td><td><strong>Connect folder.</strong> Save boards to disk as <code>.kanzen.json</code> files.</td></tr>
           <tr><td>📸</td><td><strong>Snapshots.</strong> Take, restore, or compare snapshots — card-level diff with added / removed / modified. Auto-snap before destructive actions and optional daily auto-snap.</td></tr>
           <tr><td>📜</td><td><strong>Activity feed.</strong> Every change to the board with relative timestamps.</td></tr>
-          <tr><td>🔗</td><td><strong>Share.</strong> The whole board encoded into a URL hash fragment, optionally AES-GCM-encrypted with a passphrase. Compressed with pako, with a size gate (green ≤8 K, yellow ≤64 K, blocked beyond). QR code for in-person handoff.</td></tr>
+          <tr><td>🔗</td><td><strong>Share.</strong> The whole board encoded into a URL hash fragment, optionally AES-GCM-encrypted with a passphrase. Compressed with the browser-native <code>CompressionStream</code> API (zero CDN dependencies on modern browsers), with a size gate (green ≤8 K, yellow ≤64 K, blocked beyond). QR code for in-person handoff.</td></tr>
           <tr><td>⚙</td><td><strong>Settings.</strong> Board name, columns, WIP limits, members, labels, background (8 gradients, 8 solids, custom).</td></tr>
           <tr><td>⇅</td><td><strong>Import / export.</strong> KanZen JSON, CSV, Markdown, or Trello JSON import.</td></tr>
           <tr><td>↶ ↷</td><td><strong>Undo / redo.</strong> 50 deep per board.</td></tr>
@@ -4001,9 +4001,33 @@ async function shareSnapshot(filename){
 }
 
 /* ============================================================
-   URL sharing — pako lazy load + crypto + size gate + QR
+   URL sharing — native CompressionStream + crypto + size gate + QR
    ============================================================ */
 
+/* Native compression — no CDN. Falls back to lazy pako only on browsers
+   that don't expose CompressionStream (rare in 2026: Chrome 80+, FF 113+,
+   Safari 16.4+ all ship it). */
+const HAS_COMPRESSION_STREAM = typeof CompressionStream !== 'undefined';
+async function compressBytes(bytes){
+  if(HAS_COMPRESSION_STREAM){
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
+    const buf = await new Response(stream).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+  const pako = await loadPako();
+  if(!pako) throw new Error('No compression library available');
+  return pako.deflate(bytes);
+}
+async function decompressBytes(bytes){
+  if(HAS_COMPRESSION_STREAM){
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+    const buf = await new Response(stream).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+  const pako = await loadPako();
+  if(!pako) throw new Error('No compression library available');
+  return pako.inflate(bytes);
+}
 let _pako = null;
 function loadPako(){
   if(_pako) return Promise.resolve(_pako);
@@ -4082,10 +4106,10 @@ async function generateShareUrl(){
   if(!src){ toast('No board'); return; }
   const board = $('share-stripped').checked ? stripBoardForShare(src) : JSON.parse(JSON.stringify(src));
   delete board._meta;
-  const pako = await loadPako();
-  if(!pako){ toast('Failed to load compression library'); return; }
   const json = JSON.stringify(board);
-  const compressed = pako.deflate(new TextEncoder().encode(json));
+  let compressed;
+  try{ compressed = await compressBytes(new TextEncoder().encode(json)); }
+  catch(e){ toast(e.message); return; }
   const passphrase = $('share-passphrase').value;
   let hashFragment;
   if(passphrase){
@@ -4139,17 +4163,21 @@ async function renderQrCode(){
 
 /* ---------- import banner / load shared board ---------- */
 
-let _pendingShare = null;   // { encrypted: bool, payload: {salt,iv,ct} | bytes }
+let _pendingShare = null;
 function detectShareInHash(){
   const h = location.hash;
   if(!h) return;
   if(h.startsWith('#kz:')){
-    _pendingShare = { encrypted:false, b64: h.slice(4) };
+    _pendingShare = { format:'kz', encrypted:false, b64: h.slice(4) };
     showImportBanner(false);
   } else if(h.startsWith('#kze:')){
     const parts = h.slice(5).split('.');
     if(parts.length !== 3) return;
-    _pendingShare = { encrypted:true, salt:parts[0], iv:parts[1], ct:parts[2] };
+    _pendingShare = { format:'kze', encrypted:true, salt:parts[0], iv:parts[1], ct:parts[2] };
+    showImportBanner(true);
+  } else if(h.startsWith('#e=')){
+    // spec format — concatenated salt(16) + iv(12) + ciphertext, base64url
+    _pendingShare = { format:'e', encrypted:true, b64: h.slice(3) };
     showImportBanner(true);
   }
 }
@@ -4164,16 +4192,24 @@ function dismissImportBanner(){
 }
 async function loadSharedBoard(){
   if(!_pendingShare) return;
-  const pako = await loadPako();
-  if(!pako){ toast('Failed to load compression library'); return; }
   let compressed;
   try{
-    if(_pendingShare.encrypted){
+    if(_pendingShare.format === 'kze'){
       const pass = $('import-banner-pass').value;
       if(!pass){ toast('Passphrase required'); return; }
       const salt = b64UrlToBytes(_pendingShare.salt);
       const iv   = b64UrlToBytes(_pendingShare.iv);
       const ct   = b64UrlToBytes(_pendingShare.ct);
+      compressed = await decryptBytes(salt, iv, ct, pass);
+    } else if(_pendingShare.format === 'e'){
+      // spec format: concatenated salt(16) + iv(12) + ciphertext
+      const pass = $('import-banner-pass').value;
+      if(!pass){ toast('Passphrase required'); return; }
+      const all = b64UrlToBytes(_pendingShare.b64);
+      if(all.length < 28){ toast('Invalid share payload'); return; }
+      const salt = all.slice(0, 16);
+      const iv   = all.slice(16, 28);
+      const ct   = all.slice(28);
       compressed = await decryptBytes(salt, iv, ct, pass);
     } else {
       compressed = b64UrlToBytes(_pendingShare.b64);
@@ -4183,7 +4219,7 @@ async function loadSharedBoard(){
   }
   let json;
   try{
-    const inflated = pako.inflate(compressed);
+    const inflated = await decompressBytes(compressed);
     json = JSON.parse(new TextDecoder().decode(inflated));
   }catch(e){
     console.error(e); toast('Could not decode shared board'); return;
