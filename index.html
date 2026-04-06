@@ -6,7 +6,9 @@
 <meta name="author" content="Chirag Patnaik">
 <meta name="description" content="KanZen — Kanban without the noise. Single-file local-first kanban. No server, no account, no board limits.">
 <title>KanZen — Kanban without the noise</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%234f46e5'/%3E%3Ctext x='16' y='21' font-family='-apple-system,system-ui,sans-serif' font-size='14' font-weight='700' fill='white' text-anchor='middle'%3EKZ%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%230079bf'/%3E%3Cstop offset='1' stop-color='%235067c5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='6' fill='url(%23g)'/%3E%3Ctext x='16' y='22' font-family='-apple-system,BlinkMacSystemFont,system-ui,Helvetica,Arial,sans-serif' font-size='15' font-weight='800' fill='white' text-anchor='middle' letter-spacing='-0.5'%3EKZ%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href='data:application/json,{"name":"KanZen","short_name":"KanZen","description":"Kanban without the noise — single-file local-first kanban","start_url":"./","display":"standalone","background_color":"%230079bf","theme_color":"%230079bf","icons":[{"src":"data:image/svg+xml;utf8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 192 192%27%3E%3Crect width=%27192%27 height=%27192%27 rx=%2724%27 fill=%27%230079bf%27/%3E%3Ctext x=%2796%27 y=%27130%27 font-family=%27sans-serif%27 font-size=%2790%27 font-weight=%27800%27 fill=%27white%27 text-anchor=%27middle%27%3EKZ%3C/text%3E%3C/svg%3E","sizes":"192x192","type":"image/svg+xml","purpose":"any maskable"}]}'>
+<meta name="theme-color" content="#0079bf">
 <style>
   :root {
     /* Trello-style palette */
@@ -297,6 +299,13 @@
     align-items: flex-start;
     gap: 8px;
     scroll-behavior: smooth;
+  }
+  main.board-area.view-list,
+  main.board-area.view-calendar {
+    display: block;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0;
   }
   .empty-state {
     margin: auto;
@@ -650,6 +659,352 @@
   .help-modal td { padding: 6px 8px; vertical-align: top; }
   .help-modal td:first-child { width: 130px; }
 
+  /* ---------- view pills ---------- */
+  .view-pill {
+    padding: 4px 12px;
+    font-size: 12px;
+    background: transparent;
+    color: var(--header-text);
+    border-radius: 3px;
+    font-weight: 500;
+  }
+  .view-pill:hover { background: var(--header-input-bg-hover); }
+  .view-pill.active {
+    background: white;
+    color: var(--accent);
+  }
+  [data-theme="dark"] .view-pill.active { background: var(--accent); color: white; }
+
+  /* ---------- list view ---------- */
+  .list-view {
+    background: var(--bg-elev);
+    border-radius: var(--radius-lg);
+    margin: 12px 14px 80px;
+    overflow: auto;
+    max-height: calc(100vh - 145px);
+  }
+  .list-view table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .list-view thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-mute);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .list-view thead th:hover { color: var(--text); }
+  .list-view thead th.sorted { color: var(--accent); }
+  .list-view tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .list-view tbody tr { cursor: pointer; }
+  .list-view tbody tr:hover { background: rgba(9,30,66,0.04); }
+  [data-theme="dark"] .list-view tbody tr:hover { background: rgba(255,255,255,0.04); }
+  .list-view td.title-cell { font-weight: 500; max-width: 360px; word-break: break-word; }
+  .list-view .label-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    color: white;
+    margin-right: 3px;
+    font-weight: 600;
+  }
+
+  /* ---------- calendar view ---------- */
+  .cal-view {
+    margin: 12px 14px 80px;
+    background: var(--bg-elev);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    max-height: calc(100vh - 145px);
+    overflow: auto;
+  }
+  .cal-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .cal-header h3 { margin: 0; font-size: 16px; flex: 1; }
+  .cal-header button { padding: 6px 12px; }
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+  .cal-grid .dow {
+    text-align: center;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-mute);
+    font-weight: 600;
+    padding: 4px;
+  }
+  .cal-day {
+    min-height: 96px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    font-size: 12px;
+    overflow: hidden;
+  }
+  .cal-day.other-month { opacity: 0.4; }
+  .cal-day.today { border-color: var(--accent); border-width: 2px; }
+  .cal-day .dn { font-weight: 600; margin-bottom: 4px; color: var(--text-mute); }
+  .cal-day.today .dn { color: var(--accent); }
+  .cal-day .cal-card {
+    background: var(--bg-card);
+    border-radius: 3px;
+    padding: 3px 6px;
+    margin-bottom: 2px;
+    cursor: grab;
+    box-shadow: 0 1px 0 rgba(9,30,66,0.15);
+    border-left: 3px solid var(--accent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cal-day .cal-card.priority-urgent { border-left-color: var(--danger); }
+  .cal-day .cal-card.priority-high   { border-left-color: var(--warn); }
+  .cal-day .cal-card.priority-medium { border-left-color: var(--warn); }
+  .cal-day .cal-card.priority-low    { border-left-color: var(--ok); }
+  .cal-day.drag-over { background: rgba(0,121,191,0.18); }
+  .cal-no-date {
+    margin-top: 14px;
+    padding: 10px;
+    background: var(--bg);
+    border-radius: var(--radius);
+  }
+  .cal-no-date h4 { margin: 0 0 6px; font-size: 12px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.04em; }
+  .cal-no-date .cal-card { display: inline-block; margin: 2px; }
+
+  /* ---------- snapshots modal ---------- */
+  .snap-list { max-height: 360px; overflow-y: auto; }
+  .snap-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 6px;
+    background: var(--bg);
+  }
+  .snap-row.selected { border-color: var(--accent); background: rgba(0,121,191,0.08); }
+  .snap-row .snap-meta { flex: 1; min-width: 0; }
+  .snap-row .snap-name { font-weight: 600; font-size: 13px; }
+  .snap-row .snap-when { font-size: 11px; color: var(--text-mute); }
+  .snap-tag {
+    font-size: 10px;
+    padding: 1px 7px;
+    border-radius: 8px;
+    background: rgba(9,30,66,0.08);
+    color: var(--text-mute);
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  [data-theme="dark"] .snap-tag { background: rgba(255,255,255,0.08); }
+  .snap-tag.auto-destructive { background: rgba(235,90,70,0.15); color: var(--danger); }
+  .snap-tag.auto-daily { background: rgba(97,189,79,0.15); color: var(--ok); }
+  .snap-row button { padding: 4px 8px; font-size: 12px; }
+
+  .diff-header {
+    padding: 8px 12px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: var(--text-mute);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .diff-section { margin-bottom: 14px; }
+  .diff-section h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-mute); }
+  .diff-card {
+    padding: 6px 10px;
+    border-radius: var(--radius);
+    margin-bottom: 4px;
+    font-size: 13px;
+    border-left: 3px solid;
+  }
+  .diff-card.added    { background: rgba(97,189,79,0.12);  border-color: var(--ok); }
+  .diff-card.removed  { background: rgba(235,90,70,0.12);  border-color: var(--danger); }
+  .diff-card.modified { background: rgba(242,169,0,0.12);  border-color: var(--warn); }
+  .diff-card .changes { font-size: 11px; color: var(--text-mute); margin-top: 2px; }
+  .diff-card .changes span { display: inline-block; margin-right: 8px; }
+
+  /* ---------- share modal ---------- */
+  .share-url-box {
+    width: 100%;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    word-break: break-all;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    max-height: 80px;
+    overflow-y: auto;
+    color: var(--text);
+  }
+  .size-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .size-badge.green  { background: rgba(97,189,79,0.18);  color: var(--ok); }
+  .size-badge.yellow { background: rgba(242,169,0,0.18);  color: var(--warn); }
+  .size-badge.red    { background: rgba(235,90,70,0.18);  color: var(--danger); }
+  #qr-canvas { display: block; margin: 12px auto 0; max-width: 200px; }
+
+  /* ---------- activity feed ---------- */
+  .activity-list { max-height: 480px; overflow-y: auto; }
+  .activity-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .activity-row:last-child { border-bottom: none; }
+  .activity-icon {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: rgba(9,30,66,0.06);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  [data-theme="dark"] .activity-icon { background: rgba(255,255,255,0.06); }
+  .activity-row .when { font-size: 11px; color: var(--text-mute); }
+  .activity-empty { text-align: center; padding: 24px; color: var(--text-mute); font-size: 13px; }
+
+  /* ---------- comments ---------- */
+  .comment-block {
+    padding: 8px 10px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    margin-bottom: 6px;
+    border-left: 3px solid var(--border-strong);
+  }
+  .comment-block .who-when {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 11px;
+    color: var(--text-mute);
+    margin-bottom: 3px;
+  }
+  .comment-block .who-when strong { color: var(--text); font-weight: 600; }
+  .comment-block .body { font-size: 13px; line-height: 1.45; }
+  .comment-block .actions { float: right; }
+  .comment-block .actions button { padding: 0 6px; font-size: 11px; color: var(--text-mute); }
+
+  /* ---------- import banner ---------- */
+  #import-banner {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: var(--accent);
+    color: white;
+    padding: 12px 18px;
+    display: none;
+    align-items: center;
+    gap: 12px;
+    z-index: 90;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    flex-wrap: wrap;
+  }
+  #import-banner.open { display: flex; }
+  #import-banner strong { font-weight: 700; }
+  #import-banner input[type=password] {
+    width: auto;
+    flex: 1;
+    min-width: 140px;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.4);
+    color: white;
+  }
+  #import-banner input[type=password]::placeholder { color: rgba(255,255,255,0.7); }
+  #import-banner button {
+    background: white;
+    color: var(--accent);
+    border: none;
+    font-weight: 600;
+    padding: 6px 14px;
+  }
+  #import-banner button:hover { background: rgba(255,255,255,0.85); }
+  #import-banner button.dismiss {
+    background: rgba(255,255,255,0.15);
+    color: white;
+  }
+  #import-banner button.dismiss:hover { background: rgba(255,255,255,0.25); }
+
+  /* ---------- mobile move popover ---------- */
+  #move-popover {
+    position: fixed;
+    z-index: 110;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 8px;
+    display: none;
+    min-width: 200px;
+  }
+  #move-popover.open { display: block; }
+  #move-popover .pop-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-mute);
+    padding: 4px 8px 6px;
+    font-weight: 600;
+  }
+  #move-popover button {
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+  }
+  #move-popover button:hover { background: rgba(9,30,66,0.06); }
+  [data-theme="dark"] #move-popover button:hover { background: rgba(255,255,255,0.06); }
+
+  /* ---------- a11y / motion preferences ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+  @media (prefers-contrast: more) {
+    :root { --border: #000; --border-strong: #000; }
+    [data-theme="dark"] { --border: #fff; --border-strong: #fff; }
+  }
+  /* keyboard focus ring */
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
   /* ---------- toast ---------- */
   #toast {
     position: fixed;
@@ -708,10 +1063,16 @@
   <div class="save-indicator" id="save-indicator">Ready</div>
   <button class="help-btn" onclick="openModal('help-modal')" title="Help">?</button>
   <div class="header-actions">
-    <button class="icon-btn" id="connect-fs-btn" onclick="connectFolder()" title="Connect folder for disk save">📁</button>
-    <button class="icon-btn" onclick="openModal('settings-modal')" title="Board settings">⚙</button>
-    <button class="icon-btn" onclick="openModal('import-export-modal')" title="Import / export">⇅</button>
-    <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle theme">◐</button>
+    <button class="icon-btn" onclick="undo()" title="Undo (Cmd/Ctrl+Z)" aria-label="Undo">↶</button>
+    <button class="icon-btn" onclick="redo()" title="Redo (Cmd/Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+    <button class="icon-btn" id="connect-fs-btn" onclick="connectFolder()" title="Connect folder for disk save" aria-label="Connect folder">📁</button>
+    <button class="icon-btn" onclick="openModal('snapshots-modal')" title="Snapshots" aria-label="Snapshots">📸</button>
+    <button class="icon-btn" onclick="openModal('activity-modal')" title="Activity feed" aria-label="Activity feed">📜</button>
+    <button class="icon-btn" onclick="openShareModal()" title="Share board" aria-label="Share board">🔗</button>
+    <button class="icon-btn" onclick="openModal('settings-modal')" title="Board settings" aria-label="Board settings">⚙</button>
+    <button class="icon-btn" onclick="openModal('import-export-modal')" title="Import / export" aria-label="Import / export">⇅</button>
+    <button class="icon-btn" id="install-btn" style="display:none;" onclick="triggerInstall()" title="Install as app" aria-label="Install as app">⤓</button>
+    <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">◐</button>
   </div>
 </header>
 
@@ -735,6 +1096,11 @@
   </select>
   <select id="filter-member"><option value="">All members</option></select>
   <span class="clear-filters" onclick="clearFilters()">Clear</span>
+  <div style="margin-left:auto;display:flex;gap:4px;background:var(--header-input-bg);padding:3px;border-radius:var(--radius);">
+    <button class="view-pill" data-view="board"    onclick="setViewMode('board')">Board</button>
+    <button class="view-pill" data-view="list"     onclick="setViewMode('list')">List</button>
+    <button class="view-pill" data-view="calendar" onclick="setViewMode('calendar')">Calendar</button>
+  </div>
 </div>
 
 <main class="board-area" id="board-area"></main>
@@ -743,7 +1109,7 @@
 <div id="modal-overlay" onclick="onOverlayClick(event)">
 
   <!-- card editor -->
-  <div class="modal" id="card-modal">
+  <div class="modal" role="dialog" aria-modal="true" id="card-modal">
     <div class="modal-header">
       <h2 id="card-modal-title">Edit card</h2>
       <button onclick="closeModal()">✕</button>
@@ -771,6 +1137,15 @@
             <div id="attachments-list"></div>
             <input type="file" id="attach-input" multiple style="display:none" onchange="onAttachFiles(event)">
             <button class="btn-ghost" onclick="document.getElementById('attach-input').click()">+ Attach files</button>
+          </div>
+          <div class="field">
+            <span class="label-txt">Comments</span>
+            <div id="comments-list"></div>
+            <div style="display:flex;gap:6px;margin-top:6px;">
+              <select id="comment-author" style="width:auto;min-width:120px;"></select>
+              <input id="comment-input" type="text" placeholder="Add a comment…">
+              <button class="btn-primary" onclick="addCommentFromEditor()">Post</button>
+            </div>
           </div>
         </div>
         <div class="editor-side">
@@ -810,7 +1185,7 @@
   </div>
 
   <!-- settings -->
-  <div class="modal" id="settings-modal">
+  <div class="modal" role="dialog" aria-modal="true" id="settings-modal">
     <div class="modal-header">
       <h2>Board settings</h2>
       <button onclick="closeModal()">✕</button>
@@ -841,6 +1216,10 @@
           <button class="btn-ghost" onclick="addLabelFromSettings()">Add</button>
         </div>
       </div>
+      <div class="field">
+        <span class="label-txt">Board background</span>
+        <div id="settings-bg-list"></div>
+      </div>
     </div>
     <div class="modal-footer">
       <div class="spacer"></div>
@@ -849,7 +1228,7 @@
   </div>
 
   <!-- import / export -->
-  <div class="modal" id="import-export-modal">
+  <div class="modal" role="dialog" aria-modal="true" id="import-export-modal">
     <div class="modal-header">
       <h2>Import / export</h2>
       <button onclick="closeModal()">✕</button>
@@ -859,9 +1238,11 @@
         <span class="label-txt">Export</span>
         <button class="btn-ghost" onclick="exportCurrentBoard()">⤓ Export current board (.kanzen.json)</button>
         <button class="btn-ghost" style="margin-top:6px;" onclick="exportAllBoards()">⤓ Export all boards (.json)</button>
+        <button class="btn-ghost" style="margin-top:6px;" onclick="exportBoardCsv()">⤓ Export current board as CSV</button>
+        <button class="btn-ghost" style="margin-top:6px;" onclick="exportBoardMarkdown()">⤓ Export current board as Markdown</button>
       </div>
       <div class="field">
-        <span class="label-txt">Import</span>
+        <span class="label-txt">Import KanZen JSON</span>
         <input type="file" id="import-file" accept=".json,.kanzen.json" onchange="onImportFile(event)">
         <div style="margin-top:6px;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;">
@@ -873,8 +1254,94 @@
         </div>
       </div>
       <div class="field">
+        <span class="label-txt">Import from Trello</span>
+        <input type="file" id="import-trello-file" accept=".json" onchange="onImportTrelloFile(event)">
+        <div style="font-size:11px;color:var(--text-mute);margin-top:4px;">Export your Trello board as JSON (Show Menu → More → Print and Export → Export as JSON), then load it here.</div>
+      </div>
+      <div class="field">
         <span class="label-txt">Storage</span>
         <div id="storage-status" style="font-size:12px;color:var(--text-mute);"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="spacer"></div>
+      <button onclick="closeModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- activity feed -->
+  <div class="modal" role="dialog" aria-modal="true" id="activity-modal" style="max-width:600px;">
+    <div class="modal-header">
+      <h2>Activity feed</h2>
+      <button onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="activity-content" class="activity-list"></div>
+    </div>
+    <div class="modal-footer">
+      <div class="spacer"></div>
+      <button onclick="closeModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- snapshots -->
+  <div class="modal" role="dialog" aria-modal="true" id="snapshots-modal" style="max-width:760px;">
+    <div class="modal-header">
+      <h2>Snapshots</h2>
+      <button onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="btn-primary" onclick="takeSnapshotPrompt()">📸 Take snapshot</button>
+        <button class="btn-ghost" onclick="toggleSnapshotCompareMode()" id="snap-compare-btn">⇄ Compare two</button>
+        <div style="flex:1;"></div>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-mute);">
+          <input type="checkbox" id="auto-snap-destructive" style="width:auto;" onchange="toggleAutoSnap('destructive', this.checked)">
+          Auto-snap before destructive
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-mute);">
+          <input type="checkbox" id="auto-snap-daily" style="width:auto;" onchange="toggleAutoSnap('daily', this.checked)">
+          Daily auto-snap
+        </label>
+      </div>
+      <div id="snapshots-content"></div>
+    </div>
+    <div class="modal-footer">
+      <div class="spacer"></div>
+      <button onclick="closeModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- share -->
+  <div class="modal" role="dialog" aria-modal="true" id="share-modal">
+    <div class="modal-header">
+      <h2>Share board</h2>
+      <button onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-mute);margin:0 0 12px;">A self-contained URL with the entire board encoded in the hash fragment. Nothing is uploaded — the recipient's browser decodes it locally.</p>
+      <label class="field">
+        <span class="label-txt">Passphrase (optional, AES-GCM 256)</span>
+        <input id="share-passphrase" type="password" placeholder="Leave blank for unencrypted link">
+      </label>
+      <div class="field">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;">
+          <input type="checkbox" id="share-stripped" style="width:auto;"> Share stripped (no descriptions / checklists / attachments / comments — fits more in URL)
+        </label>
+      </div>
+      <div class="field">
+        <button class="btn-primary" onclick="generateShareUrl()">Generate URL</button>
+      </div>
+      <div id="share-result" style="display:none;">
+        <div class="field">
+          <span class="label-txt">URL <span id="share-size-badge" class="size-badge"></span></span>
+          <div class="share-url-box" id="share-url-box"></div>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <button class="btn-ghost" onclick="copyShareUrl()">📋 Copy</button>
+            <button class="btn-ghost" onclick="renderQrCode()">⊞ QR code</button>
+          </div>
+        </div>
+        <div id="qr-wrap" style="display:none;"><canvas id="qr-canvas"></canvas></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -916,6 +1383,15 @@
     </div>
   </div>
 
+</div>
+
+<div id="move-popover" role="menu" aria-label="Move card to column"></div>
+
+<div id="import-banner">
+  <strong>📥 A shared KanZen board is in this link.</strong>
+  <input type="password" id="import-banner-pass" placeholder="Passphrase (if encrypted)" style="display:none;">
+  <button onclick="loadSharedBoard()">Load board</button>
+  <button class="dismiss" onclick="dismissImportBanner()">Dismiss</button>
 </div>
 
 <div id="toast"></div>
@@ -995,13 +1471,16 @@ const S = window.S = {
   focusedCardId: null,
   editingCardId: null,
   editingColumnId: null,
+  viewMode: {},                 // boardId -> 'board' | 'list' | 'calendar'
+  listSort: { col:'updated', dir:'desc' },
+  calMonth: null,               // {y, m} (m: 0-11)
 };
 
 /* ============================================================
    Storage layer — façade over StorageFS / StorageIDB
    ============================================================ */
 
-const IDB_NAME = 'kanzen', IDB_VERSION = 1;
+const IDB_NAME = 'kanzen', IDB_VERSION = 2;
 let _idb = null;
 function openIDB(){
   if(_idb) return Promise.resolve(_idb);
@@ -1009,10 +1488,24 @@ function openIDB(){
     const req = indexedDB.open(IDB_NAME, IDB_VERSION);
     req.onupgradeneeded = e => {
       const db = e.target.result;
-      if(!db.objectStoreNames.contains('boards'))   db.createObjectStore('boards',   { keyPath:'id' });
-      if(!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath:'key' });
+      if(!db.objectStoreNames.contains('boards'))    db.createObjectStore('boards',    { keyPath:'id' });
+      if(!db.objectStoreNames.contains('settings'))  db.createObjectStore('settings',  { keyPath:'key' });
+      if(!db.objectStoreNames.contains('snapshots')){
+        const s = db.createObjectStore('snapshots', { keyPath:'filename' });
+        s.createIndex('boardId','boardId',{unique:false});
+      }
     };
     req.onsuccess = () => { _idb = req.result; resolve(_idb); };
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbAllByIndex(store, indexName, key){
+  const db = await openIDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store,'readonly');
+    const idx = tx.objectStore(store).index(indexName);
+    const req = idx.getAll(key);
+    req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
@@ -1069,6 +1562,19 @@ const StorageIDB = {
   },
   async saveSettings(settings){
     await idbPut('settings', { key:'main', value: settings });
+  },
+  async saveSnapshot(filename, boardId, snapshotJson){
+    await idbPut('snapshots', { filename, boardId, takenAt: now(), data: snapshotJson });
+  },
+  async listSnapshots(boardId){
+    const rows = await idbAllByIndex('snapshots','boardId',boardId);
+    return rows.sort((a,b)=>b.takenAt - a.takenAt);
+  },
+  async loadSnapshot(filename){
+    return idbGet('snapshots', filename);
+  },
+  async deleteSnapshot(filename){
+    return idbDel('snapshots', filename);
   }
 };
 
@@ -1119,6 +1625,46 @@ const StorageFS = {
     const w = await fh.createWritable();
     await w.write(JSON.stringify(settings, null, 2));
     await w.close();
+  },
+  async ensureSnapshotsDir(){
+    return await this.dirHandle.getDirectoryHandle('_snapshots', { create:true });
+  },
+  async saveSnapshot(filename, boardId, snapshotJson){
+    const dir = await this.ensureSnapshotsDir();
+    const fh = await dir.getFileHandle(filename, { create:true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(snapshotJson, null, 2));
+    await w.close();
+  },
+  async listSnapshots(boardId){
+    try{
+      const dir = await this.ensureSnapshotsDir();
+      const rows = [];
+      for await (const [name, entry] of dir.entries()){
+        if(entry.kind !== 'file' || !name.endsWith('.kanzen.json')) continue;
+        try{
+          const text = await (await entry.getFile()).text();
+          const json = JSON.parse(text);
+          if(json?._snapshot && json._snapshot.boardId === boardId){
+            rows.push({ filename:name, boardId, takenAt:json._snapshot.takenAt, data:json });
+          }
+        }catch(_){ }
+      }
+      return rows.sort((a,b)=>b.takenAt - a.takenAt);
+    }catch(_){ return []; }
+  },
+  async loadSnapshot(filename){
+    const dir = await this.ensureSnapshotsDir();
+    const fh = await dir.getFileHandle(filename);
+    const text = await (await fh.getFile()).text();
+    const data = JSON.parse(text);
+    return { filename, boardId: data?._snapshot?.boardId, takenAt: data?._snapshot?.takenAt, data };
+  },
+  async deleteSnapshot(filename){
+    try{
+      const dir = await this.ensureSnapshotsDir();
+      await dir.removeEntry(filename);
+    }catch(_){}
   }
 };
 
@@ -1136,6 +1682,29 @@ const storage = {
   async saveSettings(s){
     await StorageIDB.saveSettings(s);
     if(S.storageMode === 'fs'){ try{ await StorageFS.saveSettings(s); }catch(e){ console.error(e); } }
+  },
+  async saveSnapshot(filename, boardId, snapshotJson){
+    await StorageIDB.saveSnapshot(filename, boardId, snapshotJson);
+    if(S.storageMode === 'fs'){ try{ await StorageFS.saveSnapshot(filename, boardId, snapshotJson); }catch(e){ console.error(e); } }
+  },
+  async listSnapshots(boardId){
+    if(S.storageMode === 'fs'){
+      try{
+        const fsRows = await StorageFS.listSnapshots(boardId);
+        if(fsRows.length) return fsRows;
+      }catch(_){}
+    }
+    return StorageIDB.listSnapshots(boardId);
+  },
+  async loadSnapshot(filename){
+    if(S.storageMode === 'fs'){
+      try{ return await StorageFS.loadSnapshot(filename); }catch(_){}
+    }
+    return StorageIDB.loadSnapshot(filename);
+  },
+  async deleteSnapshot(filename){
+    await StorageIDB.deleteSnapshot(filename);
+    if(S.storageMode === 'fs'){ try{ await StorageFS.deleteSnapshot(filename); }catch(_){} }
   }
 };
 
@@ -1240,6 +1809,7 @@ async function flushSave(){
 }
 const debouncedSave = debounce(flushSave, 5000);
 function scheduleSave(){
+  pushHistory();
   markDirty();
   debouncedSave();
 }
@@ -1334,8 +1904,37 @@ function isFilterActive(){
   return !!(f.search || f.labelId || f.memberId || f.priority || f.due);
 }
 
+function currentViewMode(){
+  const id = S.currentBoardId; if(!id) return 'board';
+  return S.viewMode[id] || 'board';
+}
+function setViewMode(mode){
+  const id = S.currentBoardId; if(!id) return;
+  S.viewMode[id] = mode;
+  if(mode === 'calendar' && !S.calMonth){
+    const d = new Date(); S.calMonth = { y: d.getFullYear(), m: d.getMonth() };
+  }
+  renderBoard();
+}
+function syncViewPills(){
+  const mode = currentViewMode();
+  for(const btn of document.querySelectorAll('.view-pill')){
+    btn.classList.toggle('active', btn.dataset.view === mode);
+  }
+}
+
 function renderBoard(){
+  applyBoardBackground();
+  syncViewPills();
+  const mode = currentViewMode();
   const area = $('board-area');
+  area.className = 'board-area view-' + mode;
+  if(mode === 'list')     return renderListView(area);
+  if(mode === 'calendar') return renderCalendarView(area);
+  return renderKanbanView(area);
+}
+
+function renderKanbanView(area){
   area.innerHTML = '';
   const b = currentBoard();
   if(!b){
@@ -1350,6 +1949,8 @@ function renderBoard(){
     const colEl = document.createElement('section');
     colEl.className = 'column' + (col.collapsed ? ' collapsed' : '');
     colEl.dataset.columnId = col.id;
+    colEl.setAttribute('role','region');
+    colEl.setAttribute('aria-label', col.name);
     colEl.draggable = true;
     colEl.addEventListener('dragstart', e => onColDragStart(e, col.id));
     colEl.addEventListener('dragover',  e => onColDragOver(e, col.id));
@@ -1396,6 +1997,225 @@ function renderBoard(){
   area.appendChild(addColEl);
 }
 
+/* ---------- list view ---------- */
+function renderListView(area){
+  area.innerHTML = '';
+  const b = currentBoard();
+  if(!b){ area.innerHTML = '<div class="empty-state"><h2>No board</h2></div>'; return; }
+
+  // flatten cards with column info
+  const rows = [];
+  for(const c of b.columns){
+    for(const cid of c.cardIds){
+      const card = b.cards[cid]; if(!card) continue;
+      if(isFilterActive() && !cardMatchesFilter(card, b)) continue;
+      rows.push({ card, col: c });
+    }
+  }
+
+  const sort = S.listSort;
+  const cmp = (a, b2) => {
+    let A, B;
+    switch(sort.col){
+      case 'title':    A = a.card.title;            B = b2.card.title;            break;
+      case 'col':      A = a.col.name;              B = b2.col.name;              break;
+      case 'priority': A = ['none','low','medium','high','urgent'].indexOf(a.card.priority);
+                       B = ['none','low','medium','high','urgent'].indexOf(b2.card.priority); break;
+      case 'due':      A = a.card.dueDate || '9999';B = b2.card.dueDate || '9999';break;
+      case 'updated':  A = a.card.updatedAt || 0;   B = b2.card.updatedAt || 0;   break;
+      default: A = 0; B = 0;
+    }
+    if(A < B) return sort.dir === 'asc' ? -1 : 1;
+    if(A > B) return sort.dir === 'asc' ?  1 : -1;
+    return 0;
+  };
+  rows.sort(cmp);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'list-view';
+  const cols = [
+    { key:'title', label:'Title' },
+    { key:'col', label:'Column' },
+    { key:'priority', label:'Priority' },
+    { key:'due', label:'Due' },
+    { key:'labels', label:'Labels', sortable:false },
+    { key:'members', label:'Members', sortable:false },
+    { key:'checklist', label:'Checklist', sortable:false },
+    { key:'updated', label:'Updated' },
+  ];
+  let html = '<table><thead><tr>';
+  for(const c of cols){
+    const sorted = sort.col === c.key ? ' sorted' : '';
+    const arrow = sort.col === c.key ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+    if(c.sortable === false) html += `<th>${c.label}</th>`;
+    else html += `<th class="${sorted.trim()}" data-col="${c.key}">${c.label}${arrow}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+  if(!rows.length){
+    html += '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-mute);">No cards match the current filter.</td></tr>';
+  } else {
+    for(const { card, col } of rows){
+      const labels = (card.labelIds||[]).map(id => {
+        const l = b.labels.find(x=>x.id===id);
+        return l ? `<span class="label-tag" style="background:${l.color}">${escapeHtml(l.name)}</span>` : '';
+      }).join('');
+      const members = (card.memberIds||[]).map(id => {
+        const m = b.members.find(x=>x.id===id);
+        return m ? escapeHtml(m.name) : '';
+      }).filter(Boolean).join(', ');
+      const cl = card.checklist || [];
+      const done = cl.filter(i => i.done).length;
+      const checkstr = cl.length ? `${done}/${cl.length}` : '—';
+      const due = card.dueDate ? escapeHtml(card.dueDate) : '—';
+      const pri = card.priority && card.priority !== 'none' ? `<span class="priority-badge priority-${card.priority}">${card.priority}</span>` : '—';
+      const upd = card.updatedAt ? relTime(card.updatedAt) : '—';
+      html += `<tr data-card-id="${card.id}">
+        <td class="title-cell">${escapeHtml(card.title)}</td>
+        <td>${escapeHtml(col.name)}</td>
+        <td>${pri}</td>
+        <td>${due}</td>
+        <td>${labels || '—'}</td>
+        <td>${members || '—'}</td>
+        <td>${checkstr}</td>
+        <td>${upd}</td>
+      </tr>`;
+    }
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  area.appendChild(wrap);
+
+  for(const th of wrap.querySelectorAll('thead th[data-col]')){
+    th.addEventListener('click', () => {
+      const k = th.dataset.col;
+      if(S.listSort.col === k) S.listSort.dir = S.listSort.dir === 'asc' ? 'desc' : 'asc';
+      else { S.listSort.col = k; S.listSort.dir = 'asc'; }
+      renderBoard();
+    });
+  }
+  for(const tr of wrap.querySelectorAll('tbody tr[data-card-id]')){
+    tr.addEventListener('click', () => openCardEditor(tr.dataset.cardId));
+  }
+}
+
+/* ---------- calendar view ---------- */
+function renderCalendarView(area){
+  area.innerHTML = '';
+  const b = currentBoard();
+  if(!b){ area.innerHTML = '<div class="empty-state"><h2>No board</h2></div>'; return; }
+  if(!S.calMonth){ const d = new Date(); S.calMonth = { y: d.getFullYear(), m: d.getMonth() }; }
+  const { y, m } = S.calMonth;
+  const monthName = new Date(y, m, 1).toLocaleDateString(undefined, { month:'long', year:'numeric' });
+  const firstDow = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+
+  // bucket cards by date
+  const byDate = {};
+  const noDate = [];
+  for(const cid in b.cards){
+    const card = b.cards[cid];
+    if(isFilterActive() && !cardMatchesFilter(card, b)) continue;
+    if(card.dueDate){
+      (byDate[card.dueDate] = byDate[card.dueDate] || []).push(card);
+    } else {
+      noDate.push(card);
+    }
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'cal-view';
+  let html = `<div class="cal-header">
+    <button class="btn-ghost" onclick="calNav(-1)">‹</button>
+    <h3>${escapeHtml(monthName)}</h3>
+    <button class="btn-ghost" onclick="calToday()">Today</button>
+    <button class="btn-ghost" onclick="calNav(1)">›</button>
+  </div>
+  <div class="cal-grid">`;
+  for(const dn of ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']) html += `<div class="dow">${dn}</div>`;
+
+  // leading other-month days
+  const prevMonthDays = new Date(y, m, 0).getDate();
+  for(let i = firstDow - 1; i >= 0; i--){
+    html += `<div class="cal-day other-month"><div class="dn">${prevMonthDays - i}</div></div>`;
+  }
+  // current month
+  const today = new Date(); today.setHours(0,0,0,0);
+  for(let d = 1; d <= daysInMonth; d++){
+    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = (today.getFullYear()===y && today.getMonth()===m && today.getDate()===d);
+    const cards = byDate[dateStr] || [];
+    let cardsHtml = '';
+    for(const c of cards.slice(0,4)){
+      cardsHtml += `<div class="cal-card priority-${c.priority||'none'}" data-card-id="${c.id}" draggable="true">${escapeHtml(c.title)}</div>`;
+    }
+    if(cards.length > 4) cardsHtml += `<div style="font-size:10px;color:var(--text-mute);">+${cards.length - 4} more</div>`;
+    html += `<div class="cal-day${isToday?' today':''}" data-date="${dateStr}">
+      <div class="dn">${d}</div>${cardsHtml}
+    </div>`;
+  }
+  // trailing other-month days
+  const totalCells = firstDow + daysInMonth;
+  const trailing = (7 - totalCells % 7) % 7;
+  for(let i = 1; i <= trailing; i++){
+    html += `<div class="cal-day other-month"><div class="dn">${i}</div></div>`;
+  }
+  html += '</div>';
+  if(noDate.length){
+    html += `<div class="cal-no-date"><h4>No due date (${noDate.length})</h4>`;
+    for(const c of noDate) html += `<span class="cal-card priority-${c.priority||'none'}" data-card-id="${c.id}" draggable="true">${escapeHtml(c.title)}</span>`;
+    html += '</div>';
+  }
+  wrap.innerHTML = html;
+  area.appendChild(wrap);
+
+  // wire interactions
+  for(const cardEl of wrap.querySelectorAll('.cal-card[data-card-id]')){
+    cardEl.addEventListener('click', () => openCardEditor(cardEl.dataset.cardId));
+    cardEl.addEventListener('dragstart', e => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', cardEl.dataset.cardId);
+      _drag = { kind:'cal-card', id: cardEl.dataset.cardId };
+    });
+  }
+  for(const day of wrap.querySelectorAll('.cal-day[data-date]')){
+    day.addEventListener('dragover', e => { e.preventDefault(); day.classList.add('drag-over'); });
+    day.addEventListener('dragleave', () => day.classList.remove('drag-over'));
+    day.addEventListener('drop', e => {
+      e.preventDefault();
+      day.classList.remove('drag-over');
+      if(_drag?.kind !== 'cal-card') return;
+      const card = b.cards[_drag.id]; if(!card) return;
+      card.dueDate = day.dataset.date;
+      card.updatedAt = now();
+      _drag = null;
+      logActivity('card-edit', `Set due date of "${card.title}" to ${card.dueDate}`);
+      scheduleSave();
+      renderBoard();
+    });
+  }
+}
+function calNav(delta){
+  let { y, m } = S.calMonth;
+  m += delta;
+  if(m < 0){ m = 11; y--; }
+  if(m > 11){ m = 0; y++; }
+  S.calMonth = { y, m };
+  renderBoard();
+}
+function calToday(){
+  const d = new Date();
+  S.calMonth = { y: d.getFullYear(), m: d.getMonth() };
+  renderBoard();
+}
+async function triggerInstall(){
+  if(!S._installPrompt){ toast('Install not available in this browser'); return; }
+  S._installPrompt.prompt();
+  const choice = await S._installPrompt.userChoice;
+  if(choice.outcome === 'accepted'){ toast('Installing…'); }
+  S._installPrompt = null;
+  $('install-btn').style.display = 'none';
+}
+
 function renderCard(card, board, matches){
   const el = document.createElement('div');
   el.className = 'card' + (matches ? '' : ' dim') + (S.focusedCardId === card.id ? ' focused' : '');
@@ -1439,6 +2259,9 @@ function renderCard(card, board, matches){
   if(card.attachments.length){
     metaParts.push(`<span class="attach-meta">📎 ${card.attachments.length}</span>`);
   }
+  if(card.comments && card.comments.length){
+    metaParts.push(`<span class="attach-meta">💬 ${card.comments.length}</span>`);
+  }
   if(card.memberIds.length){
     const avs = card.memberIds.map(mid => {
       const m = board.members.find(x => x.id === mid);
@@ -1450,7 +2273,10 @@ function renderCard(card, board, matches){
   }
   const metaHtml = metaParts.length ? `<div class="card-meta">${metaParts.join('')}</div>` : '';
 
+  el.setAttribute('role','article');
+  el.setAttribute('aria-label', card.title);
   el.innerHTML = labelsHtml + `<div class="card-title">${escapeHtml(card.title)}</div>` + metaHtml;
+  setupCardLongPress(el, card.id);
   return el;
 }
 
@@ -1491,6 +2317,10 @@ function onColDrop(e, colId){
     fromCol.cardIds = fromCol.cardIds.filter(x => x !== cardId);
     const toCol = b.columns.find(c => c.id === colId);
     if(!toCol) return;
+    if(fromCol.id !== toCol.id){
+      const card = b.cards[cardId];
+      logActivity('card-move', `Moved "${card?.title || 'card'}" from ${fromCol.name} to ${toCol.name}`);
+    }
 
     // compute insertion index by pointer Y vs existing cards in target body
     const body = document.getElementById('col-body-' + colId);
@@ -1544,6 +2374,7 @@ function renameBoardPrompt(){
 async function deleteBoardConfirm(){
   const b = currentBoard(); if(!b) return;
   if(!confirm(`Delete board "${b.name}"? This cannot be undone.`)) return;
+  await maybeAutoSnapshot('destructive');
   await storage.deleteBoard(b);
   delete S.boards[b.id];
   rebuildBoardOrder();
@@ -1559,6 +2390,7 @@ function switchBoard(id){
   S.settings.lastBoardId = id;
   storage.saveSettings(S.settings);
   S.focusedCardId = null;
+  if(!S.history.byBoard[id]) pushHistory();
   renderAll();
 }
 
@@ -1571,6 +2403,7 @@ function addColumnPrompt(){
   const name = prompt('Column name:', 'New column');
   if(!name) return;
   b.columns.push({ id:uid(), name, wipLimit:0, collapsed:false, cardIds:[] });
+  logActivity('col-add', `Added column "${name}"`);
   scheduleSave();
   renderBoard();
 }
@@ -1592,6 +2425,7 @@ async function deleteColumnConfirm(colId){
   const c = b.columns.find(x => x.id === colId); if(!c) return;
   if(c.cardIds.length && !confirm(`Delete column "${c.name}" and its ${c.cardIds.length} card(s)?`)) return;
   if(!c.cardIds.length && !confirm(`Delete column "${c.name}"?`)) return;
+  await maybeAutoSnapshot('destructive');
   for(const cid of c.cardIds) delete b.cards[cid];
   b.columns = b.columns.filter(x => x.id !== colId);
   await flushSave();
@@ -1610,6 +2444,7 @@ function addCardPrompt(colId){
   b.cards[card.id] = card;
   const c = b.columns.find(x => x.id === colId); if(!c) return;
   c.cardIds.push(card.id);
+  logActivity('card-create', `Created card "${title}" in ${c.name}`);
   scheduleSave();
   renderBoard();
 }
@@ -1617,9 +2452,12 @@ async function deleteCardConfirm(){
   const b = currentBoard(); if(!b || !S.editingCardId) return;
   const card = b.cards[S.editingCardId]; if(!card) return;
   if(!confirm(`Delete card "${card.title}"?`)) return;
+  await maybeAutoSnapshot('destructive');
   const col = findColumnByCard(b, card.id);
   if(col) col.cardIds = col.cardIds.filter(x => x !== card.id);
   delete b.cards[card.id];
+  logActivity('card-delete', `Deleted card "${card.title}"`);
+  pushHistory();
   closeModal();
   await flushSave();
   renderBoard();
@@ -1632,6 +2470,7 @@ async function deleteCardConfirm(){
 function openCardEditor(cardId){
   const b = currentBoard(); if(!b) return;
   const card = b.cards[cardId]; if(!card) return;
+  if(!card.comments) card.comments = [];
   S.editingCardId = cardId;
   $('card-modal-title').textContent = 'Edit card';
   $('card-title-input').value = card.title || '';
@@ -1643,8 +2482,57 @@ function openCardEditor(cardId){
   renderEditorLabels();
   renderEditorMembers();
   renderEditorAttachments();
+  renderEditorComments();
   openModal('card-modal');
   setTimeout(() => $('card-title-input').focus(), 50);
+}
+function renderEditorComments(){
+  const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  // populate author select
+  const sel = $('comment-author');
+  sel.innerHTML = '<option value="">— anonymous —</option>';
+  for(const m of b.members){
+    const o = document.createElement('option');
+    o.value = m.id; o.textContent = m.name;
+    if(S._lastCommentAuthor === m.id) o.selected = true;
+    sel.appendChild(o);
+  }
+  // render comment list
+  const list = $('comments-list'); list.innerHTML = '';
+  if(!card.comments.length){
+    list.innerHTML = '<div style="font-size:11px;color:var(--text-faint);">No comments yet.</div>';
+    return;
+  }
+  for(const c of card.comments){
+    const member = b.members.find(m => m.id === c.who);
+    const who = member ? member.name : (c.who || 'anonymous');
+    const div = document.createElement('div');
+    div.className = 'comment-block';
+    div.innerHTML = `
+      <div class="who-when"><strong>${escapeHtml(who)}</strong><span>${escapeHtml(relTime(c.ts))}</span>
+        <span class="actions"><button title="Delete">✕</button></span>
+      </div>
+      <div class="body">${mdToHtml(c.text)}</div>`;
+    div.querySelector('button').onclick = () => {
+      card.comments = card.comments.filter(x => x.id !== c.id);
+      renderEditorComments();
+    };
+    list.appendChild(div);
+  }
+}
+function addCommentFromEditor(){
+  const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  const text = $('comment-input').value.trim(); if(!text) return;
+  const who  = $('comment-author').value || '';
+  S._lastCommentAuthor = who;
+  if(!card.comments) card.comments = [];
+  card.comments.push({ id: uid(), ts: now(), who, text });
+  $('comment-input').value = '';
+  renderEditorComments();
+  const member = b.members.find(m => m.id === who);
+  logActivity('card-comment', `${member?member.name:'Someone'} commented on "${card.title}"`);
+  scheduleSave();
+  renderBoard();
 }
 function renderDescPreview(){
   const v = $('card-desc-input').value;
@@ -1771,6 +2659,7 @@ function saveCardModal(){
   card.priority    = $('card-priority').value;
   card.dueDate     = $('card-due').value || null;
   card.updatedAt   = now();
+  logActivity('card-edit', `Edited card "${card.title}"`);
   closeModal();
   scheduleSave();
   renderBoard();
@@ -1814,6 +2703,31 @@ function openSettingsModal(){
     row.children[1].onclick = () => { b.members = b.members.filter(x => x.id !== m.id); openSettingsModal(); };
     ml.appendChild(row);
   }
+  // backgrounds
+  const bgl = $('settings-bg-list'); bgl.innerHTML = '';
+  const cur = b.background || {};
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-bottom:8px;';
+  for(const g of BG_GRADIENTS){
+    const div = document.createElement('div');
+    div.title = g.name;
+    div.style.cssText = `height:40px;border-radius:6px;background:${g.value};cursor:pointer;border:2px solid ${cur.kind==='gradient'&&cur.value===g.value?'var(--accent)':'transparent'};`;
+    div.onclick = () => setBoardBackground('gradient', g.value);
+    grid.appendChild(div);
+  }
+  for(const c of BG_SOLIDS){
+    const div = document.createElement('div');
+    div.style.cssText = `height:40px;border-radius:6px;background:${c};cursor:pointer;border:2px solid ${cur.kind==='solid'&&cur.value===c?'var(--accent)':'transparent'};`;
+    div.onclick = () => setBoardBackground('solid', c);
+    grid.appendChild(div);
+  }
+  bgl.appendChild(grid);
+  const customRow = document.createElement('div');
+  customRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
+  customRow.innerHTML = `<label style="font-size:11px;color:var(--text-mute);">Custom color: </label><input type="color" id="bg-custom" value="${cur.kind==='solid'?cur.value:'#0079bf'}" style="width:48px;padding:0;">`;
+  bgl.appendChild(customRow);
+  customRow.querySelector('input').onchange = e => setBoardBackground('solid', e.target.value);
+
   // labels
   const ll = $('settings-labels-list'); ll.innerHTML = '';
   for(const l of b.labels){
@@ -1946,6 +2860,8 @@ function openModal(id){
   $(id).classList.add('open');
   if(id === 'settings-modal') openSettingsModal();
   if(id === 'import-export-modal') refreshStorageStatus();
+  if(id === 'snapshots-modal') renderSnapshotsList();
+  if(id === 'activity-modal') renderActivityModal();
 }
 function closeModal(){
   $('modal-overlay').classList.remove('open');
@@ -1995,6 +2911,16 @@ function onKey(e){
   if(e.key === 'Escape'){
     if($('modal-overlay').classList.contains('open')){ closeModal(); return; }
   }
+  // Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z work even from input fields
+  if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z'){
+    if(isTypingTarget(e.target) && !e.target.closest('#card-modal') && !e.target.closest('#settings-modal')){
+      // let the input handle its own undo
+    } else {
+      e.preventDefault();
+      if(e.shiftKey) redo(); else undo();
+      return;
+    }
+  }
   if(isTypingTarget(e.target)) return;
   if(e.key === '/'){
     e.preventDefault(); $('search-input').focus(); return;
@@ -2036,6 +2962,728 @@ function moveFocus(key){
 }
 
 /* ============================================================
+   Undo / redo  +  activity feed
+   ============================================================ */
+
+S.history = { byBoard: {}, max: 50 };
+let _skipNextHistoryPush = false;
+let _suppressActivity = false;
+
+function pushHistory(){
+  if(_skipNextHistoryPush){ _skipNextHistoryPush = false; return; }
+  const id = S.currentBoardId; if(!id || !S.boards[id]) return;
+  if(!S.history.byBoard[id]) S.history.byBoard[id] = { stack:[], cursor:-1 };
+  const h = S.history.byBoard[id];
+  h.stack = h.stack.slice(0, h.cursor + 1);
+  h.stack.push(JSON.stringify(S.boards[id]));
+  if(h.stack.length > S.history.max){ h.stack.shift(); }
+  h.cursor = h.stack.length - 1;
+}
+function undo(){
+  const id = S.currentBoardId; const h = S.history.byBoard[id];
+  if(!h || h.cursor <= 0){ toast('Nothing to undo'); return; }
+  h.cursor--;
+  S.boards[id] = JSON.parse(h.stack[h.cursor]);
+  _skipNextHistoryPush = true;
+  scheduleSave();
+  renderAll();
+}
+function redo(){
+  const id = S.currentBoardId; const h = S.history.byBoard[id];
+  if(!h || h.cursor >= h.stack.length - 1){ toast('Nothing to redo'); return; }
+  h.cursor++;
+  S.boards[id] = JSON.parse(h.stack[h.cursor]);
+  _skipNextHistoryPush = true;
+  scheduleSave();
+  renderAll();
+}
+
+function logActivity(kind, text){
+  if(_suppressActivity) return;
+  const b = currentBoard(); if(!b) return;
+  if(!b.activity) b.activity = [];
+  b.activity.unshift({ id: uid(), ts: now(), kind, text });
+  if(b.activity.length > 200) b.activity.length = 200;
+}
+function activityIcon(kind){
+  return ({
+    'card-create':'🆕','card-edit':'✏️','card-delete':'🗑','card-move':'↔️','card-comment':'💬',
+    'col-add':'➕','col-rename':'✏️','col-delete':'🗑',
+    'board-rename':'🪧','board-create':'🆕',
+    'snapshot':'📸','member':'👤','label':'🏷️'
+  })[kind] || '·';
+}
+function renderActivityModal(){
+  const b = currentBoard();
+  const root = $('activity-content');
+  if(!b || !b.activity || !b.activity.length){
+    root.innerHTML = '<div class="activity-empty">No activity yet. Start editing the board and a log will appear here.</div>';
+    return;
+  }
+  let html = '';
+  for(const a of b.activity){
+    html += `<div class="activity-row">
+      <div class="activity-icon">${activityIcon(a.kind)}</div>
+      <div style="flex:1;">
+        <div>${escapeHtml(a.text)}</div>
+        <div class="when">${escapeHtml(relTime(a.ts))} · ${new Date(a.ts).toLocaleString()}</div>
+      </div>
+    </div>`;
+  }
+  root.innerHTML = html;
+}
+
+/* ============================================================
+   Snapshots
+   ============================================================ */
+
+function tsForFilename(d=new Date()){
+  const pad = n => String(n).padStart(2,'0');
+  const ms3 = String(d.getMilliseconds()).padStart(3,'0');
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+'-'+pad(d.getMinutes())+'-'+pad(d.getSeconds())+'-'+ms3;
+}
+function snapFilename(board, ts){
+  return slugify(board.name) + '_' + board.id.slice(0,4) + '_' + ts + '.kanzen.json';
+}
+function relTime(ts){
+  const s = Math.round((Date.now() - ts) / 1000);
+  if(s < 60)        return 'just now';
+  if(s < 3600)      return Math.floor(s/60) + 'm ago';
+  if(s < 86400)     return Math.floor(s/3600) + 'h ago';
+  if(s < 86400*7)   return Math.floor(s/86400) + 'd ago';
+  return new Date(ts).toLocaleDateString();
+}
+
+async function takeSnapshot(kind='manual', name=''){
+  const b = currentBoard(); if(!b) return null;
+  const ts = tsForFilename();
+  const filename = snapFilename(b, ts);
+  const snap = JSON.parse(JSON.stringify(b));
+  snap._snapshot = { name: name || '', takenAt: now(), kind, boardId: b.id };
+  try{
+    await storage.saveSnapshot(filename, b.id, snap);
+    if(kind === 'manual'){
+      logActivity('snapshot', `Snapshot taken${name ? ': '+name : ''}`);
+      scheduleSave();
+    }
+    return { filename, snap };
+  }catch(e){ console.error(e); toast('Snapshot failed'); return null; }
+}
+async function takeSnapshotPrompt(){
+  const b = currentBoard(); if(!b) return;
+  const name = prompt('Snapshot name (optional):', '');
+  if(name === null) return;
+  const r = await takeSnapshot('manual', name);
+  if(r){ toast('Snapshot saved'); renderSnapshotsList(); }
+}
+async function maybeAutoSnapshot(reason){
+  if(!S.settings.autoSnapDestructive) return;
+  if(reason === 'destructive') await takeSnapshot('auto-destructive');
+}
+async function maybeDailySnapshot(){
+  if(!S.settings.autoSnapDaily) return;
+  const b = currentBoard(); if(!b) return;
+  const list = await storage.listSnapshots(b.id);
+  const lastDaily = list.find(s => (s.data?._snapshot?.kind === 'auto-daily'));
+  if(lastDaily && Date.now() - lastDaily.takenAt < 86400000) return;
+  await takeSnapshot('auto-daily');
+}
+function toggleAutoSnap(which, on){
+  if(which === 'destructive') S.settings.autoSnapDestructive = on;
+  if(which === 'daily')       S.settings.autoSnapDaily = on;
+  storage.saveSettings(S.settings);
+}
+
+let _snapCompare = false;
+let _snapPicked = [];   // [filename, filename]
+function toggleSnapshotCompareMode(){
+  _snapCompare = !_snapCompare;
+  _snapPicked = [];
+  $('snap-compare-btn').textContent = _snapCompare ? '✕ Cancel compare' : '⇄ Compare two';
+  renderSnapshotsList();
+}
+
+async function renderSnapshotsList(){
+  const b = currentBoard(); if(!b) return;
+  const root = $('snapshots-content');
+  $('auto-snap-destructive').checked = !!S.settings.autoSnapDestructive;
+  $('auto-snap-daily').checked       = !!S.settings.autoSnapDaily;
+  const rows = await storage.listSnapshots(b.id);
+  if(!rows.length){
+    root.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-mute);font-size:13px;">No snapshots yet. Take one above to start tracking changes.</div>';
+    return;
+  }
+  let html = '<div class="snap-list">';
+  for(const row of rows){
+    const meta = row.data?._snapshot || {};
+    const name = meta.name || '(unnamed)';
+    const kind = meta.kind || 'manual';
+    const sel = _snapPicked.includes(row.filename) ? ' selected' : '';
+    html += `<div class="snap-row${sel}" data-filename="${escapeHtml(row.filename)}">
+      <div class="snap-meta">
+        <div class="snap-name">${escapeHtml(name)}</div>
+        <div class="snap-when">${relTime(row.takenAt)} · ${new Date(row.takenAt).toLocaleString()}</div>
+      </div>
+      <span class="snap-tag ${kind}">${kind}</span>`;
+    if(_snapCompare){
+      html += `<button class="btn-ghost" onclick="pickSnapshotForCompare('${escapeHtml(row.filename)}')">${sel?'Picked':'Pick'}</button>`;
+    } else {
+      html += `<button class="btn-ghost" onclick="restoreSnapshot('${escapeHtml(row.filename)}')">Restore</button>
+               <button class="btn-ghost" onclick="shareSnapshot('${escapeHtml(row.filename)}')">Share</button>
+               <button class="btn-danger" onclick="deleteSnapshotConfirm('${escapeHtml(row.filename)}')">✕</button>`;
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  if(_snapCompare && _snapPicked.length === 2){
+    html += await renderSnapshotDiff(_snapPicked[0], _snapPicked[1]);
+  } else if(_snapCompare){
+    html += '<div style="margin-top:10px;font-size:12px;color:var(--text-mute);text-align:center;">Pick two snapshots to compare.</div>';
+  }
+  root.innerHTML = html;
+}
+function pickSnapshotForCompare(filename){
+  if(_snapPicked.includes(filename)){
+    _snapPicked = _snapPicked.filter(f => f !== filename);
+  } else {
+    _snapPicked.push(filename);
+    if(_snapPicked.length > 2) _snapPicked.shift();
+  }
+  renderSnapshotsList();
+}
+async function renderSnapshotDiff(fnA, fnB){
+  const a = await storage.loadSnapshot(fnA);
+  const b = await storage.loadSnapshot(fnB);
+  if(!a || !b) return '';
+  // sort by takenAt: older = base, newer = head
+  const [base, head] = a.takenAt < b.takenAt ? [a, b] : [b, a];
+  const baseCards = base.data.cards || {};
+  const headCards = head.data.cards || {};
+  const baseIds = new Set(Object.keys(baseCards));
+  const headIds = new Set(Object.keys(headCards));
+  const added    = [...headIds].filter(id => !baseIds.has(id));
+  const removed  = [...baseIds].filter(id => !headIds.has(id));
+  const modified = [];
+  for(const id of headIds){
+    if(!baseIds.has(id)) continue;
+    const A = baseCards[id], B = headCards[id];
+    const changes = [];
+    if(A.title !== B.title)         changes.push(`title: "${A.title}" → "${B.title}"`);
+    if((A.description||'') !== (B.description||'')) changes.push('description');
+    if(A.priority !== B.priority)   changes.push(`priority: ${A.priority} → ${B.priority}`);
+    if(A.dueDate !== B.dueDate)     changes.push(`due: ${A.dueDate||'—'} → ${B.dueDate||'—'}`);
+    if((A.labelIds||[]).join(',') !== (B.labelIds||[]).join(',')) changes.push('labels');
+    if((A.memberIds||[]).join(',') !== (B.memberIds||[]).join(',')) changes.push('members');
+    if((A.checklist||[]).length !== (B.checklist||[]).length) changes.push(`checklist: ${(A.checklist||[]).length} → ${(B.checklist||[]).length}`);
+    if((A.attachments||[]).length !== (B.attachments||[]).length) changes.push(`attachments: ${(A.attachments||[]).length} → ${(B.attachments||[]).length}`);
+    if(changes.length) modified.push({ id, title: B.title, changes });
+  }
+  let html = `<div class="diff-header">
+    <strong>Comparing</strong> base: ${escapeHtml(relTime(base.takenAt))} → head: ${escapeHtml(relTime(head.takenAt))}
+    <span style="margin-left:auto;">+${added.length} −${removed.length} ~${modified.length}</span>
+  </div>`;
+  if(added.length){
+    html += '<div class="diff-section"><h4>Added</h4>';
+    for(const id of added) html += `<div class="diff-card added">${escapeHtml(headCards[id].title)}</div>`;
+    html += '</div>';
+  }
+  if(removed.length){
+    html += '<div class="diff-section"><h4>Removed</h4>';
+    for(const id of removed) html += `<div class="diff-card removed">${escapeHtml(baseCards[id].title)}</div>`;
+    html += '</div>';
+  }
+  if(modified.length){
+    html += '<div class="diff-section"><h4>Modified</h4>';
+    for(const m of modified) html += `<div class="diff-card modified">${escapeHtml(m.title)}<div class="changes">${m.changes.map(c=>'<span>'+escapeHtml(c)+'</span>').join('')}</div></div>`;
+    html += '</div>';
+  }
+  if(!added.length && !removed.length && !modified.length){
+    html += '<div style="text-align:center;color:var(--text-mute);font-size:12px;padding:12px;">No card-level changes between these snapshots.</div>';
+  }
+  return html;
+}
+async function restoreSnapshot(filename){
+  const b = currentBoard(); if(!b) return;
+  if(!confirm('Restore this snapshot? Your current board will be replaced. (A safety snapshot will be taken first.)')) return;
+  await takeSnapshot('auto-destructive', 'pre-restore safety');
+  const row = await storage.loadSnapshot(filename); if(!row) return;
+  const restored = JSON.parse(JSON.stringify(row.data));
+  delete restored._snapshot;
+  restored.id = b.id;                           // preserve current id so file/IDB row continues
+  restored._meta = { boardId:b.id, lastModified:now(), kanzenVersion:1 };
+  S.boards[b.id] = restored;
+  await flushSave();
+  renderAll();
+  closeModal();
+  toast('Snapshot restored');
+}
+async function deleteSnapshotConfirm(filename){
+  if(!confirm('Delete this snapshot?')) return;
+  await storage.deleteSnapshot(filename);
+  renderSnapshotsList();
+}
+async function shareSnapshot(filename){
+  const row = await storage.loadSnapshot(filename); if(!row) return;
+  closeModal();
+  openShareModal(row.data);
+}
+
+/* ============================================================
+   URL sharing — pako lazy load + crypto + size gate + QR
+   ============================================================ */
+
+let _pako = null;
+function loadPako(){
+  if(_pako) return Promise.resolve(_pako);
+  return new Promise(resolve => {
+    if(window.pako){ _pako = window.pako; resolve(_pako); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js';
+    s.onload = () => { _pako = window.pako || null; resolve(_pako); };
+    s.onerror = () => resolve(null);
+    document.head.appendChild(s);
+  });
+}
+let _qrLib = null;
+function loadQrcode(){
+  if(_qrLib) return Promise.resolve(_qrLib);
+  return new Promise(resolve => {
+    if(window.qrcode){ _qrLib = window.qrcode; resolve(_qrLib); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+    s.onload = () => { _qrLib = window.qrcode || null; resolve(_qrLib); };
+    s.onerror = () => resolve(null);
+    document.head.appendChild(s);
+  });
+}
+
+function bytesToB64Url(bytes){
+  let s = '';
+  for(let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
+}
+function b64UrlToBytes(b64){
+  const s = atob(b64.replaceAll('-','+').replaceAll('_','/'));
+  const out = new Uint8Array(s.length);
+  for(let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out;
+}
+
+async function encryptBytes(bytes, passphrase){
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv   = crypto.getRandomValues(new Uint8Array(12));
+  const km   = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  const key  = await crypto.subtle.deriveKey({ name:'PBKDF2', salt, iterations:200000, hash:'SHA-256' }, km, { name:'AES-GCM', length:256 }, false, ['encrypt']);
+  const ct   = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, key, bytes);
+  return { salt, iv, ct: new Uint8Array(ct) };
+}
+async function decryptBytes(salt, iv, ct, passphrase){
+  const km   = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  const key  = await crypto.subtle.deriveKey({ name:'PBKDF2', salt, iterations:200000, hash:'SHA-256' }, km, { name:'AES-GCM', length:256 }, false, ['decrypt']);
+  const pt   = await crypto.subtle.decrypt({ name:'AES-GCM', iv }, key, ct);
+  return new Uint8Array(pt);
+}
+
+function stripBoardForShare(board){
+  const out = JSON.parse(JSON.stringify(board));
+  for(const id in out.cards){
+    out.cards[id].description = '';
+    out.cards[id].checklist = [];
+    out.cards[id].attachments = [];
+    out.cards[id].comments = [];
+  }
+  return out;
+}
+
+let _lastShareUrl = '';
+let _shareSourceBoard = null;   // optional override for snapshot-share
+function openShareModal(boardOverride){
+  _shareSourceBoard = boardOverride || null;
+  $('share-passphrase').value = '';
+  $('share-stripped').checked = false;
+  $('share-result').style.display = 'none';
+  $('qr-wrap').style.display = 'none';
+  openModal('share-modal');
+}
+async function generateShareUrl(){
+  const src = _shareSourceBoard || currentBoard();
+  if(!src){ toast('No board'); return; }
+  const board = $('share-stripped').checked ? stripBoardForShare(src) : JSON.parse(JSON.stringify(src));
+  delete board._meta;
+  const pako = await loadPako();
+  if(!pako){ toast('Failed to load compression library'); return; }
+  const json = JSON.stringify(board);
+  const compressed = pako.deflate(new TextEncoder().encode(json));
+  const passphrase = $('share-passphrase').value;
+  let hashFragment;
+  if(passphrase){
+    const { salt, iv, ct } = await encryptBytes(compressed, passphrase);
+    hashFragment = '#kze:' + bytesToB64Url(salt) + '.' + bytesToB64Url(iv) + '.' + bytesToB64Url(ct);
+  } else {
+    hashFragment = '#kz:' + bytesToB64Url(compressed);
+  }
+  const url = location.origin + location.pathname + hashFragment;
+  const len = url.length;
+  let badge = '', badgeClass = '';
+  if(len <= 8000){       badge = `${len.toLocaleString()} chars · safe for messaging`;             badgeClass = 'green'; }
+  else if(len <= 64000){ badge = `${len.toLocaleString()} chars · works in browsers, may break in chat apps`; badgeClass = 'yellow'; }
+  else {
+    badge = `${len.toLocaleString()} chars · too large for URL sharing — try "Share stripped" or use JSON export`;
+    badgeClass = 'red';
+    $('share-result').style.display = 'block';
+    $('share-url-box').textContent = '(URL not generated — board too large)';
+    const sb = $('share-size-badge'); sb.textContent = badge; sb.className = 'size-badge ' + badgeClass;
+    return;
+  }
+  _lastShareUrl = url;
+  $('share-result').style.display = 'block';
+  $('share-url-box').textContent = url;
+  const sb = $('share-size-badge'); sb.textContent = badge; sb.className = 'size-badge ' + badgeClass;
+  $('qr-wrap').style.display = 'none';
+}
+async function copyShareUrl(){
+  if(!_lastShareUrl) return;
+  try{ await navigator.clipboard.writeText(_lastShareUrl); toast('URL copied'); }
+  catch(_){ toast('Could not copy — select the URL above'); }
+}
+async function renderQrCode(){
+  if(!_lastShareUrl) return;
+  if(_lastShareUrl.length > 2900){ toast('URL too long for a QR code'); return; }
+  const lib = await loadQrcode();
+  if(!lib){ toast('Failed to load QR library'); return; }
+  const qr = lib(0, 'L');
+  qr.addData(_lastShareUrl);
+  qr.make();
+  const cv = $('qr-canvas');
+  const cells = qr.getModuleCount();
+  const cell = 4;
+  cv.width = cv.height = cells * cell;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.fillStyle = '#000';
+  for(let r = 0; r < cells; r++) for(let c = 0; c < cells; c++) if(qr.isDark(r,c)) ctx.fillRect(c*cell, r*cell, cell, cell);
+  $('qr-wrap').style.display = 'block';
+}
+
+/* ---------- import banner / load shared board ---------- */
+
+let _pendingShare = null;   // { encrypted: bool, payload: {salt,iv,ct} | bytes }
+function detectShareInHash(){
+  const h = location.hash;
+  if(!h) return;
+  if(h.startsWith('#kz:')){
+    _pendingShare = { encrypted:false, b64: h.slice(4) };
+    showImportBanner(false);
+  } else if(h.startsWith('#kze:')){
+    const parts = h.slice(5).split('.');
+    if(parts.length !== 3) return;
+    _pendingShare = { encrypted:true, salt:parts[0], iv:parts[1], ct:parts[2] };
+    showImportBanner(true);
+  }
+}
+function showImportBanner(needsPass){
+  $('import-banner').classList.add('open');
+  $('import-banner-pass').style.display = needsPass ? '' : 'none';
+}
+function dismissImportBanner(){
+  $('import-banner').classList.remove('open');
+  history.replaceState(null, '', location.pathname);
+  _pendingShare = null;
+}
+async function loadSharedBoard(){
+  if(!_pendingShare) return;
+  const pako = await loadPako();
+  if(!pako){ toast('Failed to load compression library'); return; }
+  let compressed;
+  try{
+    if(_pendingShare.encrypted){
+      const pass = $('import-banner-pass').value;
+      if(!pass){ toast('Passphrase required'); return; }
+      const salt = b64UrlToBytes(_pendingShare.salt);
+      const iv   = b64UrlToBytes(_pendingShare.iv);
+      const ct   = b64UrlToBytes(_pendingShare.ct);
+      compressed = await decryptBytes(salt, iv, ct, pass);
+    } else {
+      compressed = b64UrlToBytes(_pendingShare.b64);
+    }
+  }catch(e){
+    console.error(e); toast('Decryption failed — wrong passphrase?'); return;
+  }
+  let json;
+  try{
+    const inflated = pako.inflate(compressed);
+    json = JSON.parse(new TextDecoder().decode(inflated));
+  }catch(e){
+    console.error(e); toast('Could not decode shared board'); return;
+  }
+  if(!json || !json.columns || !json.cards){ toast('Invalid board payload'); return; }
+  json.id = uid();
+  json._meta = { boardId:json.id, lastModified:now(), kanzenVersion:1 };
+  json.name = (json.name || 'Shared board') + ' (imported)';
+  S.boards[json.id] = json;
+  rebuildBoardOrder();
+  S.currentBoardId = json.id;
+  S.settings.lastBoardId = json.id;
+  await storage.saveBoard(json);
+  await storage.saveSettings(S.settings);
+  dismissImportBanner();
+  renderAll();
+  toast('Shared board imported');
+}
+
+/* ============================================================
+   Trello import
+   ============================================================ */
+
+const TRELLO_LABEL_COLOR_MAP = {
+  green:'#61bd4f', yellow:'#f2d600', orange:'#ff9f1a', red:'#eb5a46',
+  purple:'#c377e0', blue:'#0079bf', sky:'#00c2e0', lime:'#51e898',
+  pink:'#ff78cb', black:'#344563', null:'#b3bac5'
+};
+
+function importTrelloJson(json){
+  if(!json || !Array.isArray(json.lists) || !Array.isArray(json.cards)){
+    throw new Error('Not a valid Trello export (missing lists or cards)');
+  }
+  const board = newBoard(json.name || 'Trello board');
+  board.columns = [];
+  board.labels = [];
+  board.members = [];
+  board.cards = {};
+
+  // labels
+  const labelMap = {};
+  for(const l of (json.labels || [])){
+    const id = uid();
+    labelMap[l.id] = id;
+    board.labels.push({ id, name: l.name || '(no name)', color: TRELLO_LABEL_COLOR_MAP[l.color] || '#b3bac5' });
+  }
+  // members
+  const memberMap = {};
+  for(const m of (json.members || [])){
+    const id = uid();
+    memberMap[m.id] = id;
+    board.members.push({ id, name: m.fullName || m.username || 'Member', color: LABEL_COLORS[board.members.length % LABEL_COLORS.length] });
+  }
+  // lists (columns)
+  const listMap = {};
+  const listsSorted = json.lists.filter(l => !l.closed).sort((a,b) => (a.pos||0) - (b.pos||0));
+  for(const l of listsSorted){
+    const id = uid();
+    listMap[l.id] = id;
+    board.columns.push({ id, name: l.name || 'Untitled', wipLimit:0, collapsed:false, cardIds:[] });
+  }
+  // checklists are top-level in trello export
+  const checklistMap = {};
+  for(const cl of (json.checklists || [])) checklistMap[cl.id] = cl;
+
+  // cards
+  let attachmentSkipped = 0;
+  const cardsSorted = json.cards.filter(c => !c.closed).sort((a,b) => (a.pos||0) - (b.pos||0));
+  for(const c of cardsSorted){
+    const id = uid();
+    const colId = listMap[c.idList];
+    if(!colId) continue;
+    const card = newCard(c.name || 'Untitled');
+    card.id = id;
+    card.description = c.desc || '';
+    card.dueDate = c.due ? c.due.slice(0,10) : null;
+    card.labelIds = (c.idLabels||[]).map(lid => labelMap[lid]).filter(Boolean);
+    card.memberIds = (c.idMembers||[]).map(mid => memberMap[mid]).filter(Boolean);
+    // checklists
+    const items = [];
+    for(const cid of (c.idChecklists || [])){
+      const cl = checklistMap[cid]; if(!cl) continue;
+      for(const it of (cl.checkItems || [])){
+        items.push({ id: uid(), text: it.name || '', done: it.state === 'complete' });
+      }
+    }
+    card.checklist = items;
+    if(c.attachments && c.attachments.length) attachmentSkipped += c.attachments.length;
+    board.cards[id] = card;
+    board.columns.find(col => col.id === colId).cardIds.push(id);
+  }
+  return { board, attachmentSkipped, listCount: board.columns.length, cardCount: Object.keys(board.cards).length };
+}
+
+async function onImportTrelloFile(e){
+  const file = e.target.files[0]; if(!file) return;
+  let json;
+  try{ json = JSON.parse(await file.text()); }catch(_){ toast('Invalid JSON'); return; }
+  let result;
+  try{ result = importTrelloJson(json); }
+  catch(err){ toast(err.message); return; }
+  S.boards[result.board.id] = result.board;
+  rebuildBoardOrder();
+  S.currentBoardId = result.board.id;
+  S.settings.lastBoardId = S.currentBoardId;
+  await storage.saveBoard(result.board);
+  await storage.saveSettings(S.settings);
+  e.target.value = '';
+  closeModal();
+  renderAll();
+  toast(`Imported "${result.board.name}" — ${result.cardCount} cards in ${result.listCount} lists${result.attachmentSkipped?` (${result.attachmentSkipped} attachments skipped)`:''}`);
+}
+
+/* ============================================================
+   CSV / Markdown export
+   ============================================================ */
+
+function csvEscape(v){
+  const s = String(v ?? '');
+  if(/[",\r\n]/.test(s)) return '"' + s.replaceAll('"','""') + '"';
+  return s;
+}
+function exportBoardCsv(){
+  const b = currentBoard(); if(!b) return;
+  const headers = ['column','title','description','priority','due','labels','members','checklist','comments','created','updated'];
+  let csv = headers.join(',') + '\r\n';
+  for(const col of b.columns){
+    for(const cid of col.cardIds){
+      const c = b.cards[cid]; if(!c) continue;
+      const labels = (c.labelIds||[]).map(id => b.labels.find(x=>x.id===id)?.name).filter(Boolean).join('; ');
+      const members = (c.memberIds||[]).map(id => b.members.find(x=>x.id===id)?.name).filter(Boolean).join('; ');
+      const cl = c.checklist || [];
+      const checkstr = cl.length ? `${cl.filter(i=>i.done).length}/${cl.length}` : '';
+      const row = [col.name, c.title, c.description, c.priority, c.dueDate, labels, members, checkstr, (c.comments||[]).length, c.createdAt ? new Date(c.createdAt).toISOString() : '', c.updatedAt ? new Date(c.updatedAt).toISOString() : ''];
+      csv += row.map(csvEscape).join(',') + '\r\n';
+    }
+  }
+  downloadFile(slugify(b.name)+'.csv', csv, 'text/csv');
+}
+function exportBoardMarkdown(){
+  const b = currentBoard(); if(!b) return;
+  let md = `# ${b.name}\n\n`;
+  for(const col of b.columns){
+    md += `## ${col.name} (${col.cardIds.length})\n\n`;
+    for(const cid of col.cardIds){
+      const c = b.cards[cid]; if(!c) continue;
+      md += `### ${c.title}\n\n`;
+      const meta = [];
+      if(c.priority && c.priority !== 'none') meta.push(`**Priority:** ${c.priority}`);
+      if(c.dueDate) meta.push(`**Due:** ${c.dueDate}`);
+      const labels = (c.labelIds||[]).map(id => b.labels.find(x=>x.id===id)?.name).filter(Boolean);
+      if(labels.length) meta.push(`**Labels:** ${labels.join(', ')}`);
+      const members = (c.memberIds||[]).map(id => b.members.find(x=>x.id===id)?.name).filter(Boolean);
+      if(members.length) meta.push(`**Members:** ${members.join(', ')}`);
+      if(meta.length) md += meta.join(' · ') + '\n\n';
+      if(c.description) md += c.description + '\n\n';
+      if((c.checklist||[]).length){
+        md += `**Checklist** (${c.checklist.filter(i=>i.done).length}/${c.checklist.length}):\n`;
+        for(const i of c.checklist) md += `- [${i.done?'x':' '}] ${i.text}\n`;
+        md += '\n';
+      }
+      if((c.comments||[]).length){
+        md += `**Comments:**\n`;
+        for(const cm of c.comments){
+          const who = b.members.find(m=>m.id===cm.who)?.name || 'anonymous';
+          md += `> *${who}*: ${cm.text}\n`;
+        }
+        md += '\n';
+      }
+    }
+  }
+  downloadFile(slugify(b.name)+'.md', md, 'text/markdown');
+}
+
+/* ============================================================
+   Board backgrounds
+   ============================================================ */
+
+const BG_GRADIENTS = [
+  { name:'Sky',     value:'linear-gradient(135deg, #0079bf 0%, #5067c5 100%)' },
+  { name:'Sunset',  value:'linear-gradient(135deg, #ff6b6b 0%, #fcb045 100%)' },
+  { name:'Forest',  value:'linear-gradient(135deg, #134e5e 0%, #71b280 100%)' },
+  { name:'Berry',   value:'linear-gradient(135deg, #614385 0%, #516395 100%)' },
+  { name:'Ocean',   value:'linear-gradient(135deg, #2e3192 0%, #1bffff 100%)' },
+  { name:'Plum',    value:'linear-gradient(135deg, #4b1248 0%, #f0c27b 100%)' },
+  { name:'Slate',   value:'linear-gradient(135deg, #232526 0%, #414345 100%)' },
+  { name:'Mint',    value:'linear-gradient(135deg, #00b09b 0%, #96c93d 100%)' }
+];
+const BG_SOLIDS = ['#0079bf','#d29034','#519839','#b04632','#89609e','#cd5a91','#4bbf6b','#00aecc'];
+
+function applyBoardBackground(){
+  const b = currentBoard();
+  let bg = 'linear-gradient(135deg, #0079bf 0%, #5067c5 100%)';
+  if(b && b.background){
+    if(b.background.kind === 'gradient' || b.background.kind === 'solid') bg = b.background.value;
+  }
+  document.body.style.background = bg;
+  document.body.style.backgroundAttachment = 'fixed';
+}
+function setBoardBackground(kind, value){
+  const b = currentBoard(); if(!b) return;
+  b.background = { kind, value };
+  scheduleSave();
+  applyBoardBackground();
+  if($('settings-modal').classList.contains('open')) openSettingsModal();
+}
+
+/* ============================================================
+   Touch / long-press → "Move to" popover
+   ============================================================ */
+
+let _longPressTimer = null;
+let _longPressCardId = null;
+function setupCardLongPress(cardEl, cardId){
+  cardEl.addEventListener('pointerdown', e => {
+    if(e.pointerType !== 'touch') return;
+    _longPressCardId = cardId;
+    _longPressTimer = setTimeout(() => {
+      _longPressTimer = null;
+      openMovePopover(cardId, e.clientX, e.clientY);
+    }, 450);
+  });
+  const cancel = () => {
+    if(_longPressTimer){ clearTimeout(_longPressTimer); _longPressTimer = null; }
+  };
+  cardEl.addEventListener('pointerup', cancel);
+  cardEl.addEventListener('pointercancel', cancel);
+  cardEl.addEventListener('pointermove', e => {
+    if(_longPressTimer && Math.abs(e.movementX)+Math.abs(e.movementY) > 4) cancel();
+  });
+}
+function openMovePopover(cardId, x, y){
+  const b = currentBoard(); if(!b) return;
+  const card = b.cards[cardId]; if(!card) return;
+  const fromCol = findColumnByCard(b, cardId);
+  const pop = $('move-popover');
+  let html = `<div class="pop-title">Move "${escapeHtml(card.title.slice(0,30))}" to…</div>`;
+  for(const c of b.columns){
+    if(c.id === fromCol?.id) continue;
+    html += `<button onclick="moveCardTo('${cardId}','${c.id}')">${escapeHtml(c.name)}</button>`;
+  }
+  pop.innerHTML = html;
+  pop.classList.add('open');
+  // position
+  const rect = pop.getBoundingClientRect();
+  const px = Math.min(window.innerWidth - rect.width - 8, Math.max(8, x - rect.width/2));
+  const py = Math.min(window.innerHeight - rect.height - 8, Math.max(8, y));
+  pop.style.left = px + 'px';
+  pop.style.top  = py + 'px';
+}
+function closeMovePopover(){
+  $('move-popover').classList.remove('open');
+}
+function moveCardTo(cardId, toColId){
+  const b = currentBoard(); if(!b) return;
+  const fromCol = findColumnByCard(b, cardId);
+  if(!fromCol) return;
+  fromCol.cardIds = fromCol.cardIds.filter(x => x !== cardId);
+  const toCol = b.columns.find(c => c.id === toColId);
+  if(!toCol) return;
+  toCol.cardIds.push(cardId);
+  const card = b.cards[cardId];
+  logActivity('card-move', `Moved "${card?.title || 'card'}" from ${fromCol.name} to ${toCol.name}`);
+  scheduleSave();
+  closeMovePopover();
+  renderBoard();
+}
+document.addEventListener('click', e => {
+  if(!e.target.closest('#move-popover') && !e.target.closest('.card')) closeMovePopover();
+});
+
+/* ============================================================
    init
    ============================================================ */
 
@@ -2066,6 +3714,10 @@ async function init(){
   applyTheme();
   renderAll();
   setSaveIndicator('saved');
+  // seed history baseline for the current board (without dirtying)
+  if(S.currentBoardId){ pushHistory(); }
+  detectShareInHash();
+  maybeDailySnapshot();
 
   // listeners
   $('board-select').addEventListener('change', e => switchBoard(e.target.value));
@@ -2080,6 +3732,18 @@ async function init(){
 
   // periodic save tick
   setInterval(() => { if(S.dirty) flushSave(); }, 5000);
+
+  // PWA install prompt capture
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    S._installPrompt = e;
+    $('install-btn').style.display = 'inline-flex';
+  });
+  window.addEventListener('appinstalled', () => {
+    S._installPrompt = null;
+    $('install-btn').style.display = 'none';
+    toast('KanZen installed');
+  });
 
   // expose for tests
   window.flushSave = flushSave;
