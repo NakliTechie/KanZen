@@ -1340,6 +1340,31 @@
     </div>
   </div>
 
+  <!-- one-time intro (per machine) -->
+  <div class="modal" role="dialog" aria-modal="true" id="intro-modal" style="max-width:500px;">
+    <div class="modal-header">
+      <h2>Welcome to KanZen</h2>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;margin:0 0 14px;line-height:1.55;">
+        <strong>Kanban without the noise.</strong> Single file, your folder, your data — no servers, no accounts, no telemetry.
+      </p>
+      <p style="font-size:13px;color:var(--text-mute);margin:0 0 6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">What you can do</p>
+      <ul style="font-size:13px;color:var(--text-mute);padding-left:20px;margin:0 0 14px;line-height:1.6;">
+        <li>Drag-and-drop kanban with labels, due dates, checklists, comments, attachments.</li>
+        <li>Save your boards as plain <code>.kanzen.json</code> files in a folder you pick — sync them via Dropbox / iCloud / git for free.</li>
+        <li>Snapshots, undo/redo, list and calendar views, encrypted URL sharing, Trello import.</li>
+        <li>Works offline. Installs as an app. Your data never leaves the browser.</li>
+      </ul>
+      <p style="font-size:12px;color:var(--text-faint);margin:0;">This intro only shows once. The <strong>?</strong> button in the header has the full help.</p>
+    </div>
+    <div class="modal-footer">
+      <button onclick="introOpenReadme()">⌨ Read the README</button>
+      <div class="spacer"></div>
+      <button class="btn-primary" onclick="introDismiss()">Got it</button>
+    </div>
+  </div>
+
   <!-- first-launch user identity -->
   <div class="modal" role="dialog" aria-modal="true" id="welcome-modal" style="max-width:440px;">
     <div class="modal-header">
@@ -3211,6 +3236,25 @@ function applyTheme(){
   document.documentElement.dataset.theme = S.settings.theme || 'light';
 }
 
+/* ---------- one-time intro (per machine via localStorage) ---------- */
+const INTRO_FLAG = 'kanzen.introSeen';
+function showIntroIfNeeded(){
+  try{
+    if(localStorage.getItem(INTRO_FLAG)) { showWelcomeIfNeeded(); return; }
+  }catch(_){}
+  openModal('intro-modal');
+}
+function introDismiss(){
+  try{ localStorage.setItem(INTRO_FLAG, '1'); }catch(_){}
+  closeModal();
+  // chain to the name prompt if not already set
+  setTimeout(showWelcomeIfNeeded, 60);
+}
+function introOpenReadme(){
+  window.open('https://github.com/NakliTechie/KanZen#readme', '_blank', 'noopener');
+  introDismiss();
+}
+
 /* ---------- welcome / prefs ---------- */
 function showWelcomeIfNeeded(){
   if(!S.settings.localUser){
@@ -4073,7 +4117,7 @@ async function init(){
   if(S.currentBoardId){ pushHistory(); }
   detectShareInHash();
   maybeDailySnapshot();
-  showWelcomeIfNeeded();
+  showIntroIfNeeded();
 
   // listeners
   $('board-select').addEventListener('change', e => switchBoard(e.target.value));
