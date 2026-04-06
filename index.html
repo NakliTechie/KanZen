@@ -1131,11 +1131,11 @@
   </div>
   <input class="header-search" id="search-input" type="text" placeholder="Search cards…">
   <div class="save-indicator" id="save-indicator">Ready</div>
+  <button id="storage-hint" class="icon-btn" style="display:none;width:auto;padding:4px 8px;font-size:11px;font-weight:500;gap:4px;" onclick="connectFolder()" title="Boards live in browser storage. Click to save them to a folder on disk.">📁 Save to disk</button>
   <button class="help-btn" onclick="openModal('help-modal')" title="Help">?</button>
   <div class="header-actions">
     <button class="icon-btn" onclick="undo()" title="Undo (Cmd/Ctrl+Z)" aria-label="Undo">↶</button>
     <button class="icon-btn" onclick="redo()" title="Redo (Cmd/Ctrl+Shift+Z)" aria-label="Redo">↷</button>
-    <button class="icon-btn" id="connect-fs-btn" onclick="connectFolder()" title="Connect folder for disk save" aria-label="Connect folder">📁</button>
     <button class="icon-btn" onclick="openModal('snapshots-modal')" title="Snapshots" aria-label="Snapshots">📸</button>
     <button class="icon-btn" onclick="openModal('activity-modal')" title="Activity feed" aria-label="Activity feed">📜</button>
     <button class="icon-btn" onclick="openShareModal()" title="Share board" aria-label="Share board">🔗</button>
@@ -1509,7 +1509,9 @@
       <div class="tab-pane active" data-help-pane="overview">
         <p><strong>Kanban without the noise.</strong> Single HTML file, your folder, your data. No server, no account, no board limits.</p>
         <h3>Storage</h3>
-        <p>Click <strong>📁</strong> to connect a folder. KanZen will write each board as a plain <code>.kanzen.json</code> file you can read, back up, or sync with Dropbox / iCloud / Syncthing / git — multi-device for free. Without a folder, boards live in this browser's IndexedDB and you can still export them as JSON.</p>
+        <p>Click <strong>📁</strong> to connect a folder. KanZen writes each board as a sorted-key, pretty-printed <code>.kanzen.json</code> file you can read, back up, sync with Dropbox / iCloud / Syncthing / git — multi-device for free, no server. The folder handle is remembered between sessions in browsers that support it (Chrome). Without a folder, boards live in this browser's IndexedDB and you can still export them as JSON anytime.</p>
+        <h3>External edits</h3>
+        <p>When a folder is connected, KanZen polls the disk every 5 seconds. If another tool (or another device via git/Dropbox) changes a board file, KanZen reloads it automatically and toasts "<em>Board updated from disk</em>". Your own writes are write-locked for 2 s so you never see your own save bounce back at you.</p>
         <h3>Auto-save</h3>
         <p>Auto-save runs every 5 seconds when there are unsaved changes; destructive actions (delete card / column / board) save immediately. Snapshots (📸) capture the full board so you can compare or restore. Auto-snapshot before destructive actions is on by default.</p>
         <h3>Privacy</h3>
@@ -1630,6 +1632,16 @@ function escapeHtml(s){
 function debounce(fn, ms){
   let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); };
 }
+/* JSON serializer with deterministic sorted keys — makes git diffs sane */
+function sortedKeysReplacer(k, v){
+  if(v && typeof v === 'object' && !Array.isArray(v)){
+    const out = {};
+    for(const key of Object.keys(v).sort()) out[key] = v[key];
+    return out;
+  }
+  return v;
+}
+function stableJson(obj){ return JSON.stringify(obj, sortedKeysReplacer, 2); }
 function toast(msg){
   const el = $('toast'); el.textContent = msg; el.classList.add('show');
   clearTimeout(toast._t); toast._t = setTimeout(()=>el.classList.remove('show'), 2200);
@@ -1852,8 +1864,14 @@ const StorageFS = {
   async ensureBoardsDir(){
     return await this.dirHandle.getDirectoryHandle('boards', { create:true });
   },
+  /* stable filename: stored in board._meta.filename on first save and never re-derived,
+     so renaming a board no longer orphans the old file on disk */
   fileNameFor(board){
-    return slugify(board.name) + '-' + board.id.slice(0,4) + '.kanzen.json';
+    if(board._meta?.filename) return board._meta.filename;
+    const fn = slugify(board.name) + '-' + board.id.slice(0,4) + '.kanzen.json';
+    if(!board._meta) board._meta = { boardId: board.id, lastModified: now(), kanzenVersion: 1 };
+    board._meta.filename = fn;
+    return fn;
   },
   async loadAll(){
     const boards = {};
@@ -1882,7 +1900,8 @@ const StorageFS = {
     const boardsDir = await this.ensureBoardsDir();
     const fh = await boardsDir.getFileHandle(this.fileNameFor(board), { create:true });
     const w = await fh.createWritable();
-    await w.write(JSON.stringify(board, null, 2));
+    markWriteLock();
+    await w.write(stableJson(board));
     await w.close();
   },
   async deleteBoard(board){
@@ -1892,7 +1911,8 @@ const StorageFS = {
   async saveSettings(settings){
     const fh = await this.dirHandle.getFileHandle('kanzen-settings.json', { create:true });
     const w = await fh.createWritable();
-    await w.write(JSON.stringify(settings, null, 2));
+    markWriteLock();
+    await w.write(stableJson(settings));
     await w.close();
   },
   async ensureSnapshotsDir(){
@@ -1902,7 +1922,8 @@ const StorageFS = {
     const dir = await this.ensureSnapshotsDir();
     const fh = await dir.getFileHandle(filename, { create:true });
     const w = await fh.createWritable();
-    await w.write(JSON.stringify(snapshotJson, null, 2));
+    markWriteLock();
+    await w.write(stableJson(snapshotJson));
     await w.close();
   },
   async listSnapshots(boardId){
@@ -1977,16 +1998,60 @@ const storage = {
   }
 };
 
+/* ---------- write-lock + dirHandle persistence ---------- */
+let _writeLock = 0;          // ms epoch — file polling ignores changes until this passes
+function markWriteLock(){ _writeLock = Date.now() + 2000; }
+
+async function persistDirHandle(handle){
+  try{
+    await idbPut('settings', { key:'dirHandle', value: handle });
+  }catch(e){ /* Firefox doesn't structured-clone the handle — silently fail, re-prompt next session */ }
+}
+async function loadStoredDirHandle(){
+  try{
+    const row = await idbGet('settings','dirHandle');
+    return row?.value || null;
+  }catch(_){ return null; }
+}
+async function tryReuseStoredHandle(){
+  const stored = await loadStoredDirHandle();
+  if(!stored) return false;
+  try{
+    const perm = await stored.queryPermission({ mode:'readwrite' });
+    if(perm === 'granted'){
+      StorageFS.dirHandle = stored; S.dirHandle = stored; S.storageMode = 'fs';
+      const { boards, settings } = await StorageFS.loadAll();
+      for(const id of Object.keys(boards)) S.boards[id] = migrateLoadedBoard(boards[id]);
+      if(settings) S.settings = { ...S.settings, ...settings };
+      return true;
+    }
+    // permission still required; show a soft "reconnect" pill (handled by storage status)
+    S._pendingHandle = stored;
+  }catch(_){}
+  return false;
+}
+
 async function connectFolder(){
   if(!('showDirectoryPicker' in window)){
     toast('File System Access API not supported in this browser');
     return;
   }
   try{
-    const handle = await window.showDirectoryPicker({ mode:'readwrite' });
+    let handle;
+    if(S._pendingHandle){
+      // try to re-use the stored handle without showing the picker
+      try{
+        const perm = await S._pendingHandle.requestPermission({ mode:'readwrite' });
+        if(perm === 'granted'){ handle = S._pendingHandle; S._pendingHandle = null; }
+      }catch(_){}
+    }
+    if(!handle){
+      handle = await window.showDirectoryPicker({ mode:'readwrite' });
+    }
     StorageFS.dirHandle = handle;
     S.dirHandle = handle;
     S.storageMode = 'fs';
+    await persistDirHandle(handle);
     // load any existing boards from disk; merge with what's in memory
     const { boards, settings } = await StorageFS.loadAll();
     for(const id of Object.keys(boards)) S.boards[id] = migrateLoadedBoard(boards[id]);
@@ -2005,13 +2070,57 @@ async function connectFolder(){
   }
 }
 
+/* ---------- file-change polling (5s) ---------- */
+const _fileSigCache = {};
+async function pollFsChanges(){
+  if(S.storageMode !== 'fs' || !S.dirHandle) return;
+  if(Date.now() < _writeLock) return;
+  try{
+    const dir = await S.dirHandle.getDirectoryHandle('boards', { create:false });
+    const seen = new Set();
+    for await (const [name, entry] of dir.entries()){
+      if(entry.kind !== 'file' || !name.endsWith('.kanzen.json')) continue;
+      seen.add(name);
+      const file = await entry.getFile();
+      const sig = `${file.lastModified}-${file.size}`;
+      if(_fileSigCache[name] && _fileSigCache[name] !== sig){
+        try{
+          const text = await file.text();
+          const json = JSON.parse(text);
+          if(json && json.id){
+            S.boards[json.id] = migrateLoadedBoard(json);
+            if(json.id === S.currentBoardId) renderAll();
+            else renderBoardSwitcher();
+            toast(`"${json.name}" updated from disk`);
+          }
+        }catch(e){ console.warn('reload failed', e); }
+      }
+      _fileSigCache[name] = sig;
+    }
+    // forget cache entries for files that disappeared (deleted externally)
+    for(const k of Object.keys(_fileSigCache)) if(!seen.has(k)) delete _fileSigCache[k];
+  }catch(_){}
+}
+
 function refreshStorageStatus(){
   const el = $('storage-status');
-  if(!el) return;
-  if(S.storageMode === 'fs'){
-    el.innerHTML = '✓ Connected to local folder. Boards are saved to <code>boards/*.kanzen.json</code> on disk.';
-  } else {
-    el.innerHTML = 'Boards are stored in this browser\'s IndexedDB. Click <strong>📁</strong> in the header to save them as files in a folder you pick.';
+  const hint = $('storage-hint');
+  if(el){
+    if(S.storageMode === 'fs'){
+      el.innerHTML = '✓ Connected to local folder. Boards are saved to <code>boards/*.kanzen.json</code> on disk and re-checked for external edits every 5 seconds.';
+    } else if(S._pendingHandle){
+      el.innerHTML = '⚠ Folder previously connected but permission needs to be re-granted. Click <strong>📁</strong> in the header.';
+    } else {
+      el.innerHTML = 'Boards are stored in this browser\'s IndexedDB. Click <strong>📁</strong> in the header to save them as files in a folder you pick.';
+    }
+  }
+  if(hint){
+    if(S.storageMode === 'fs'){
+      hint.style.display = 'none';
+    } else {
+      hint.style.display = '';
+      hint.textContent = S._pendingHandle ? '⚠ Reconnect folder' : '📁 Save to disk';
+    }
   }
 }
 
@@ -4197,6 +4306,9 @@ async function init(){
     if(settings) S.settings = { ...S.settings, ...settings };
   }catch(e){ console.warn('IDB load failed', e); }
 
+  // try to silently re-attach to a previously connected folder
+  await tryReuseStoredHandle();
+
   rebuildBoardOrder();
   if(S.settings.lastBoardId && S.boards[S.settings.lastBoardId]){
     S.currentBoardId = S.settings.lastBoardId;
@@ -4216,6 +4328,7 @@ async function init(){
   applyTheme();
   renderAll();
   setSaveIndicator('saved');
+  refreshStorageStatus();
   // seed history baseline for the current board (without dirtying)
   if(S.currentBoardId){ pushHistory(); }
   detectShareInHash();
@@ -4235,6 +4348,8 @@ async function init(){
 
   // periodic save tick
   setInterval(() => { if(S.dirty) flushSave(); }, 5000);
+  // file-change polling (5s) — picks up external edits when a folder is connected
+  setInterval(pollFsChanges, 5000);
 
   // PWA install prompt capture
   window.addEventListener('beforeinstallprompt', e => {

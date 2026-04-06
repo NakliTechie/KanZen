@@ -36,10 +36,16 @@ Boards live on your device — as plain `.kanzen.json` files in a folder you cho
 - URL sharing: encrypted (AES-GCM 256, PBKDF2 200K) or plain, pako-compressed, with size gate and QR code. The hash fragment never leaves the browser
 
 **Storage & interop**
+- File System Access API as the source of truth — pretty-printed, sorted-key JSON for clean git diffs
+- Stable filenames that survive board renames (no orphaned files on disk)
+- Folder handle persisted between sessions where the browser allows it (Chrome)
+- 5-second polling for external edits — if you sync via git/Dropbox/iCloud, the other device's changes appear as a "Board updated from disk" toast
+- IndexedDB fallback when no folder is connected; "Browser storage only" pill nudges you to wire up a folder
 - Auto-save every 5 s on changes; immediate save on destructive actions
 - Per-board and full-state JSON export / import (merge or replace)
 - CSV and Markdown export
 - Trello JSON import (lists, cards, labels, members, checklists)
+- Card-level audit trail: every card carries `createdBy/createdAt/lastModifiedBy/lastModifiedAt` and the activity log records every change with structured detail (filterable by user, action, card)
 - PWA-lite: inline manifest, installable as an app
 
 **UI**
