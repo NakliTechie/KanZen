@@ -2067,9 +2067,9 @@ function findColumnByCard(board, cardId){
 }
 function markDirty(){ S.dirty = true; setSaveIndicator('dirty'); }
 
-/* one-shot migration: bring older board JSON up to current schema */
+/* idempotent migration: brings older board JSON up to current schema; safe to re-run */
 function migrateLoadedBoard(b){
-  if(!b || b._migrated_v3) return b;
+  if(!b) return b;
   // top-level timestamps
   b.createdAt = toIso(b.createdAt);
   if(b._meta){
@@ -2107,7 +2107,6 @@ function migrateLoadedBoard(b){
       if(!('detail'    in a)) a.detail = a.text ? { text: a.text } : {};
     }
   }
-  b._migrated_v3 = true;
   return b;
 }
 
@@ -2510,7 +2509,7 @@ function renderCalendarView(area){
       card.dueDate = day.dataset.date;
       stampCard(card);
       _drag = null;
-      logActivity('card-edit', `Set due date of "${card.title}" to ${card.dueDate}`);
+      logActivity('card_due_changed', { cardId: card.id, cardTitle: card.title, detail: { dueDate: card.dueDate } });
       scheduleSave();
       renderBoard();
     });
@@ -2646,7 +2645,7 @@ function onColDrop(e, colId){
     stampCard(b.cards[cardId]);
     if(fromCol.id !== toCol.id){
       const card = b.cards[cardId];
-      logActivity('card-move', `Moved "${card?.title || 'card'}" from ${fromCol.name} to ${toCol.name}`);
+      logActivity('card_moved', { cardId, cardTitle: card?.title, detail: { fromColumn: fromCol.name, toColumn: toCol.name } });
     }
 
     // compute insertion index by pointer Y vs existing cards in target body
@@ -2693,7 +2692,9 @@ async function renameBoardPrompt(){
   const b = currentBoard(); if(!b) return;
   const name = await kzPrompt({ title:'Rename board', defaultValue: b.name, okLabel:'Rename' });
   if(!name) return;
+  const oldName = b.name;
   b.name = name;
+  if(oldName !== name) logActivity('board_renamed', { detail: { oldName, newName: name } });
   rebuildBoardOrder();
   scheduleSave();
   renderAll();
@@ -2730,14 +2731,16 @@ async function addColumnPrompt(){
   const name = await kzPrompt({ title:'New column', defaultValue:'New column', okLabel:'Add' });
   if(!name) return;
   b.columns.push({ id:uid(), name, wipLimit:0, collapsed:false, cardIds:[] });
-  logActivity('col-add', `Added column "${name}"`);
+  logActivity('column_created', { detail: { name } });
   scheduleSave();
   renderBoard();
 }
 function renameColumn(colId, newName){
   const b = currentBoard(); if(!b) return;
   const c = b.columns.find(x => x.id === colId); if(!c) return;
+  const oldName = c.name;
   c.name = newName;
+  if(oldName !== newName) logActivity('column_renamed', { detail: { oldName, newName } });
   scheduleSave();
 }
 function toggleColumnCollapse(colId){
@@ -2753,8 +2756,10 @@ async function deleteColumnConfirm(colId){
   const msg = c.cardIds.length ? `${c.cardIds.length} card${c.cardIds.length===1?'':'s'} in this column will also be deleted.` : 'This column will be removed.';
   if(!await kzConfirm({ title:`Delete "${c.name}"?`, message: msg, okLabel:'Delete column', danger:true })) return;
   await maybeAutoSnapshot('destructive');
+  const removedName = c.name;
   for(const cid of c.cardIds) delete b.cards[cid];
   b.columns = b.columns.filter(x => x.id !== colId);
+  logActivity('column_deleted', { detail: { name: removedName } });
   await flushSave();
   renderBoard();
 }
@@ -2771,7 +2776,7 @@ async function addCardPrompt(colId){
   b.cards[card.id] = card;
   const c = b.columns.find(x => x.id === colId); if(!c) return;
   c.cardIds.push(card.id);
-  logActivity('card-create', `Created card "${title}" in ${c.name}`);
+  logActivity('card_created', { cardId: card.id, cardTitle: title, detail: { column: c.name } });
   scheduleSave();
   renderBoard();
 }
@@ -2783,7 +2788,7 @@ async function deleteCardConfirm(){
   const col = findColumnByCard(b, card.id);
   if(col) col.cardIds = col.cardIds.filter(x => x !== card.id);
   delete b.cards[card.id];
-  logActivity('card-delete', `Deleted card "${card.title}"`);
+  logActivity('card_deleted', { cardId: card.id, cardTitle: card.title, detail: { column: col?.name } });
   pushHistory();
   closeModal();
   await flushSave();
@@ -2799,6 +2804,11 @@ function openCardEditor(cardId){
   const card = b.cards[cardId]; if(!card) return;
   if(!card.comments) card.comments = [];
   S.editingCardId = cardId;
+  // snapshot the card so we can diff for activity log on save
+  S._editorBefore = JSON.stringify({
+    title: card.title, description: card.description, priority: card.priority,
+    dueDate: card.dueDate, labelIds: [...(card.labelIds||[])].sort(), memberIds: [...(card.memberIds||[])].sort()
+  });
   $('card-modal-title').textContent = 'Edit card';
   $('card-title-input').value = card.title || '';
   $('card-desc-input').value  = card.description || '';
@@ -2871,8 +2881,7 @@ function addCommentFromEditor(){
   card.comments.push({ id: uid(), timestamp: now(), who, text });
   $('comment-input').value = '';
   renderEditorComments();
-  const member = b.members.find(m => m.id === who);
-  logActivity('card-comment', `${member?member.name:'Someone'} commented on "${card.title}"`);
+  logActivity('card_commented', { cardId: card.id, cardTitle: card.title, detail: {} });
   scheduleSave();
   renderBoard();
 }
@@ -2934,6 +2943,7 @@ async function newLabelPrompt(){
   if(!name) return;
   const color = LABEL_COLORS[b.labels.length % LABEL_COLORS.length];
   b.labels.push({ id:uid(), name, color });
+  logActivity('label_created', { detail: { name } });
   renderEditorLabels();
   scheduleSave();
 }
@@ -2959,6 +2969,7 @@ async function newMemberPrompt(){
   const name = await kzPrompt({ title:'New member', placeholder:'Member name', okLabel:'Add member' });
   if(!name) return;
   b.members.push({ id:uid(), name, color:LABEL_COLORS[b.members.length % LABEL_COLORS.length] });
+  logActivity('member_added', { detail: { name } });
   renderEditorMembers();
   scheduleSave();
 }
@@ -2998,12 +3009,30 @@ async function onAttachFiles(e){
 }
 function saveCardModal(){
   const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  const before = S._editorBefore ? JSON.parse(S._editorBefore) : {};
   card.title       = $('card-title-input').value.trim() || 'Untitled';
   card.description = $('card-desc-input').value;
   card.priority    = $('card-priority').value;
   card.dueDate     = $('card-due').value || null;
   stampCard(card);
-  logActivity('card-edit', `Edited card "${card.title}"`);
+  // diff to log specific changes
+  const changedFields = [];
+  if(before.title !== undefined && before.title !== card.title)               changedFields.push({ field:'title',       oldValue: before.title,       newValue: card.title });
+  if(before.description !== undefined && before.description !== card.description) changedFields.push({ field:'description', oldValue: before.description, newValue: card.description });
+  if(before.priority !== undefined && before.priority !== card.priority)       changedFields.push({ field:'priority',    oldValue: before.priority,    newValue: card.priority });
+  if(before.dueDate !== undefined && before.dueDate !== card.dueDate)          changedFields.push({ field:'dueDate',     oldValue: before.dueDate,     newValue: card.dueDate });
+  for(const ch of changedFields){
+    logActivity('card_edited', { cardId: card.id, cardTitle: card.title, detail: ch });
+  }
+  // member-list change → card_assigned
+  if(before.memberIds){
+    const after = [...(card.memberIds||[])].sort().join(',');
+    const prev  = before.memberIds.join(',');
+    if(after !== prev){
+      logActivity('card_assigned', { cardId: card.id, cardTitle: card.title, detail: { memberIds: card.memberIds } });
+    }
+  }
+  S._editorBefore = null;
   closeModal();
   scheduleSave();
   renderBoard();
@@ -3393,39 +3422,113 @@ function redo(){
   renderAll();
 }
 
-function logActivity(kind, text){
+function logActivity(action, opts = {}){
   if(_suppressActivity) return;
   const b = currentBoard(); if(!b) return;
   if(!b.activity) b.activity = [];
-  b.activity.unshift({ id: uid(), ts: now(), kind, text });
-  if(b.activity.length > 200) b.activity.length = 200;
+  b.activity.unshift({
+    id: uid(),
+    timestamp: now(),
+    user: S.settings.localUser || null,
+    action,
+    cardId:    opts.cardId    || null,
+    cardTitle: opts.cardTitle || null,
+    detail:    opts.detail    || {}
+  });
+  if(b.activity.length > 500) b.activity.length = 500;
 }
-function activityIcon(kind){
-  return ({
-    'card-create':'🆕','card-edit':'✏️','card-delete':'🗑','card-move':'↔️','card-comment':'💬',
-    'col-add':'➕','col-rename':'✏️','col-delete':'🗑',
-    'board-rename':'🪧','board-create':'🆕',
-    'snapshot':'📸','member':'👤','label':'🏷️'
-  })[kind] || '·';
+const ACTION_META = {
+  card_created:    { icon:'🆕', verb:'created',         noun:'card' },
+  card_edited:     { icon:'✏️', verb:'edited',          noun:'card' },
+  card_moved:      { icon:'↔️', verb:'moved',           noun:'card' },
+  card_deleted:    { icon:'🗑', verb:'deleted',         noun:'card' },
+  card_commented:  { icon:'💬', verb:'commented on',    noun:'card' },
+  card_assigned:   { icon:'👥', verb:'changed members on', noun:'card' },
+  card_due_changed:{ icon:'📅', verb:'changed due date of', noun:'card' },
+  column_created:  { icon:'➕', verb:'added',           noun:'column' },
+  column_renamed:  { icon:'✏️', verb:'renamed',         noun:'column' },
+  column_deleted:  { icon:'🗑', verb:'deleted',         noun:'column' },
+  label_created:   { icon:'🏷️', verb:'added',           noun:'label' },
+  member_added:    { icon:'👤', verb:'added',           noun:'member' },
+  board_renamed:   { icon:'🪧', verb:'renamed',         noun:'board' },
+  snapshot_taken:  { icon:'📸', verb:'took',            noun:'snapshot' },
+  legacy:          { icon:'·',  verb:'',                noun:'' }
+};
+function actionIcon(a){
+  return (ACTION_META[a.action] || ACTION_META.legacy).icon;
 }
+function activityRowText(a){
+  if(a.detail && a.detail.text) return a.detail.text;
+  const m = ACTION_META[a.action] || ACTION_META.legacy;
+  const who = a.user ? a.user : 'Someone';
+  const target = a.cardTitle ? `"${a.cardTitle}"` : (a.detail?.name ? `"${a.detail.name}"` : '');
+  if(a.action === 'column_renamed' && a.detail?.oldName && a.detail?.newName)
+    return `${who} renamed column "${a.detail.oldName}" → "${a.detail.newName}"`;
+  if(a.action === 'board_renamed' && a.detail?.oldName && a.detail?.newName)
+    return `${who} renamed board "${a.detail.oldName}" → "${a.detail.newName}"`;
+  let suffix = '';
+  if(a.action === 'card_moved' && a.detail?.fromColumn && a.detail?.toColumn)
+    suffix = ` from ${a.detail.fromColumn} to ${a.detail.toColumn}`;
+  else if(a.action === 'card_due_changed' && a.detail?.dueDate)
+    suffix = ` to ${a.detail.dueDate}`;
+  else if((a.action === 'card_created' || a.action === 'card_deleted') && a.detail?.column)
+    suffix = ` ${a.action === 'card_created' ? 'in' : 'from'} ${a.detail.column}`;
+  return `${who} ${m.verb} ${m.noun} ${target}${suffix}`.replace(/\s+/g,' ').trim();
+}
+const ACTIVITY_FILTER = { user:'', action:'', cardId:'' };
 function renderActivityModal(){
   const b = currentBoard();
   const root = $('activity-content');
+  const users = new Set(); const actions = new Set(); const cards = new Map();
+  if(b?.activity){
+    for(const a of b.activity){
+      if(a.user)    users.add(a.user);
+      if(a.action)  actions.add(a.action);
+      if(a.cardId && a.cardTitle && !cards.has(a.cardId)) cards.set(a.cardId, a.cardTitle);
+    }
+  }
+  let html = `<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;font-size:12px;align-items:center;">
+    <select id="afilter-user" style="width:auto;font-size:12px;padding:4px 8px;"><option value="">Any user</option>${[...users].map(u=>`<option ${ACTIVITY_FILTER.user===u?'selected':''}>${escapeHtml(u)}</option>`).join('')}</select>
+    <select id="afilter-action" style="width:auto;font-size:12px;padding:4px 8px;"><option value="">Any action</option>${[...actions].sort().map(a=>`<option value="${escapeHtml(a)}" ${ACTIVITY_FILTER.action===a?'selected':''}>${escapeHtml(a.replaceAll('_',' '))}</option>`).join('')}</select>
+    <select id="afilter-card" style="width:auto;font-size:12px;padding:4px 8px;max-width:200px;"><option value="">Any card</option>${[...cards].map(([id,title])=>`<option value="${escapeHtml(id)}" ${ACTIVITY_FILTER.cardId===id?'selected':''}>${escapeHtml(title)}</option>`).join('')}</select>
+    <span class="clear-filters" style="cursor:pointer;color:var(--accent);" onclick="clearActivityFilters()">Clear</span>
+  </div>`;
   if(!b || !b.activity || !b.activity.length){
-    root.innerHTML = '<div class="activity-empty">No activity yet. Start editing the board and a log will appear here.</div>';
+    root.innerHTML = html + '<div class="activity-empty">No activity yet. Start editing the board and a log will appear here.</div>';
+    wireActivityFilters();
     return;
   }
-  let html = '';
-  for(const a of b.activity){
-    html += `<div class="activity-row">
-      <div class="activity-icon">${activityIcon(a.kind)}</div>
+  const filtered = b.activity.filter(a =>
+    (!ACTIVITY_FILTER.user   || a.user   === ACTIVITY_FILTER.user) &&
+    (!ACTIVITY_FILTER.action || a.action === ACTIVITY_FILTER.action) &&
+    (!ACTIVITY_FILTER.cardId || a.cardId === ACTIVITY_FILTER.cardId)
+  );
+  if(!filtered.length){
+    root.innerHTML = html + '<div class="activity-empty">No matching events.</div>';
+    wireActivityFilters();
+    return;
+  }
+  for(const a of filtered){
+    const click = a.cardId ? `onclick="closeModal(); openCardEditor('${a.cardId}')" style="cursor:pointer;"` : '';
+    html += `<div class="activity-row" ${click}>
+      <div class="activity-icon">${actionIcon(a)}</div>
       <div style="flex:1;">
-        <div>${escapeHtml(a.text)}</div>
-        <div class="when">${escapeHtml(relTime(a.ts))} · ${new Date(a.ts).toLocaleString()}</div>
+        <div>${escapeHtml(activityRowText(a))}</div>
+        <div class="when">${escapeHtml(relTime(a.timestamp))} · ${new Date(a.timestamp).toLocaleString()}</div>
       </div>
     </div>`;
   }
   root.innerHTML = html;
+  wireActivityFilters();
+}
+function wireActivityFilters(){
+  document.getElementById('afilter-user')?.addEventListener('change',   e => { ACTIVITY_FILTER.user   = e.target.value; renderActivityModal(); });
+  document.getElementById('afilter-action')?.addEventListener('change', e => { ACTIVITY_FILTER.action = e.target.value; renderActivityModal(); });
+  document.getElementById('afilter-card')?.addEventListener('change',   e => { ACTIVITY_FILTER.cardId = e.target.value; renderActivityModal(); });
+}
+function clearActivityFilters(){
+  ACTIVITY_FILTER.user = ACTIVITY_FILTER.action = ACTIVITY_FILTER.cardId = '';
+  renderActivityModal();
 }
 
 /* ============================================================
@@ -3460,7 +3563,7 @@ async function takeSnapshot(kind='manual', name=''){
   try{
     await storage.saveSnapshot(filename, b.id, snap);
     if(kind === 'manual'){
-      logActivity('snapshot', `Snapshot taken${name ? ': '+name : ''}`);
+      logActivity('snapshot_taken', { detail: { name: name || '(unnamed)' } });
       scheduleSave();
     }
     return { filename, snap };
@@ -4072,7 +4175,7 @@ function moveCardTo(cardId, toColId){
   toCol.cardIds.push(cardId);
   const card = b.cards[cardId];
   stampCard(card);
-  logActivity('card-move', `Moved "${card?.title || 'card'}" from ${fromCol.name} to ${toCol.name}`);
+  logActivity('card_moved', { cardId, cardTitle: card?.title, detail: { fromColumn: fromCol.name, toColumn: toCol.name } });
   scheduleSave();
   closeMovePopover();
   renderBoard();
