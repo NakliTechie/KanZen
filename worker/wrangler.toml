@@ -1,0 +1,18 @@
+name = "kanzen-sync"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Replace the id with your own KV namespace.
+# Create one with:
+#   wrangler kv namespace create KANZEN_KV
+# then paste the resulting id below.
+[[kv_namespaces]]
+binding = "KANZEN_KV"
+id = "REPLACE_ME"
+
+# Optional access token. Set with:
+#   wrangler secret put SYNC_TOKEN
+# Leave unset to run open (not recommended for boards you care about).
+#
+# [vars]
+# SYNC_TOKEN = ""

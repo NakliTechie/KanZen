@@ -1132,6 +1132,7 @@
   <input class="header-search" id="search-input" type="text" placeholder="Search cards…">
   <div class="save-indicator" id="save-indicator">Ready</div>
   <button id="storage-hint" class="icon-btn" style="display:none;width:auto;padding:4px 8px;font-size:11px;font-weight:500;gap:4px;" onclick="connectFolder()" title="Boards live in browser storage. Click to save them to a folder on disk.">📁 Save to disk</button>
+  <button id="sync-indicator" class="icon-btn" style="display:none;width:auto;padding:4px 8px;font-size:11px;gap:4px;" onclick="onSyncClick()" title="Cloud sync"></button>
   <button class="help-btn" onclick="openModal('help-modal')" title="Help">?</button>
   <div class="header-actions">
     <button class="icon-btn" onclick="undo()" title="Undo (Cmd/Ctrl+Z)" aria-label="Undo">↶</button>
@@ -1299,6 +1300,13 @@
         </label>
         <div id="team-mode-status" style="font-size:11px;color:var(--text-faint);margin-top:6px;"></div>
       </div>
+      <div class="field" id="board-sync-row" style="display:none;">
+        <span class="label-txt">Cloud sync</span>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--text-mute);">
+          <input type="checkbox" id="board-sync-toggle" style="width:auto;margin-top:2px;" onchange="onBoardSyncToggle(this.checked)">
+          <span><strong style="color:var(--text);">Sync this board</strong> via the configured Cloudflare Worker. Encrypted client-side with your sync passphrase.</span>
+        </label>
+      </div>
     </div>
     <div class="modal-footer">
       <div class="spacer"></div>
@@ -1393,7 +1401,7 @@
   </div>
 
   <!-- app preferences -->
-  <div class="modal" role="dialog" aria-modal="true" id="prefs-modal" style="max-width:520px;">
+  <div class="modal" role="dialog" aria-modal="true" id="prefs-modal" style="max-width:560px;">
     <div class="modal-header">
       <h2>Preferences</h2>
       <button onclick="closeModal()">✕</button>
@@ -1410,7 +1418,28 @@
           <option value="dark">Dark</option>
         </select>
       </label>
-      <p style="font-size:11px;color:var(--text-faint);margin:0;">More preferences (auto-save interval, sync) will land here.</p>
+      <div class="field">
+        <span class="label-txt">Cloud sync (optional, BYO Cloudflare Worker)</span>
+        <p style="font-size:11px;color:var(--text-mute);margin:0 0 8px;line-height:1.45;">Deploy your own Worker (~3 min, free tier) to sync boards across devices. KanZen never sees your passphrase — boards are AES-GCM encrypted client-side. <a href="https://github.com/NakliTechie/KanZen/tree/main/worker" target="_blank" rel="noopener" style="color:var(--accent);">Setup guide</a></p>
+        <label class="field" style="margin-bottom:6px;">
+          <span class="label-txt" style="font-size:10px;">Worker URL</span>
+          <input id="prefs-sync-url" type="url" placeholder="https://kanzen-sync.YOURNAME.workers.dev">
+        </label>
+        <label class="field" style="margin-bottom:6px;">
+          <span class="label-txt" style="font-size:10px;">Sync token (X-Sync-Token header)</span>
+          <input id="prefs-sync-token" type="password" placeholder="Optional shared secret">
+        </label>
+        <label class="field" style="margin-bottom:6px;">
+          <span class="label-txt" style="font-size:10px;">Sync passphrase (AES-GCM key — never sent to the Worker)</span>
+          <input id="prefs-sync-pass" type="password" placeholder="Required for encryption">
+        </label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn-primary" onclick="saveSyncConfig()">Save sync config</button>
+          <button class="btn-ghost" onclick="testSyncConnection()">Test connection</button>
+          <span id="prefs-sync-status" style="font-size:11px;color:var(--text-mute);"></span>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--text-faint);margin:0;">Device id: <code id="prefs-deviceid"></code></p>
     </div>
     <div class="modal-footer">
       <div class="spacer"></div>
@@ -1522,6 +1551,8 @@
         <p>When a folder is connected, KanZen polls the disk every 5 seconds. If another tool (or another device via git/Dropbox) changes a board file, KanZen reloads it automatically and toasts "<em>Board updated from disk</em>". Your own writes are write-locked for 2 s so you never see your own save bounce back at you.</p>
         <h3>Team mode</h3>
         <p>For boards you collaborate on via git, Settings → Team mode splits the board into a folder: <code>_board.json</code> (columns, members, labels), <code>cards/&lt;id&gt;.json</code> (one file per card), and <code>_activity.jsonl</code> (append-only log). Each card edit only rewrites that card's file, so two people editing different cards never produce a merge conflict. Lossless toggle in both directions.</p>
+        <h3>Cloud sync (BYO Worker)</h3>
+        <p>Optional. Deploy your own tiny Cloudflare Worker (<a href="https://github.com/NakliTechie/KanZen/tree/main/worker" target="_blank" rel="noopener">3-minute setup</a>) and configure it in Preferences → Cloud sync. Boards are AES-GCM encrypted client-side with a passphrase you control — KanZen never sends the passphrase to the Worker, so even with full Worker access nobody can read your boards. The cloud icon in the header turns green when synced.</p>
         <h3>Auto-save</h3>
         <p>Auto-save runs every 5 seconds when there are unsaved changes; destructive actions (delete card / column / board) save immediately. Snapshots (📸) capture the full board so you can compare or restore. Auto-snapshot before destructive actions is on by default.</p>
         <h3>Privacy</h3>
@@ -2390,6 +2421,7 @@ function scheduleSave(){
   pushHistory();
   markDirty();
   debouncedSave();
+  if(S.currentBoardId) markBoardForSync(S.currentBoardId);
 }
 async function flushAllBoards(){
   for(const id of S.boardOrder){
@@ -2788,6 +2820,14 @@ function calToday(){
 function setHelpTab(name){
   for(const b of document.querySelectorAll('.help-modal .tab-btn')) b.classList.toggle('active', b.dataset.helpTab === name);
   for(const p of document.querySelectorAll('.help-modal .tab-pane')) p.classList.toggle('active', p.dataset.helpPane === name);
+}
+function onBoardSyncToggle(on){
+  const b = currentBoard(); if(!b) return;
+  if(!b._meta) b._meta = { boardId: b.id, lastModified: now(), kanzenVersion: 1 };
+  b._meta.sync = on;
+  scheduleSave();
+  if(on){ markBoardForSync(b.id); toast('Sync on for this board'); }
+  else toast('Sync off for this board');
 }
 async function triggerInstall(){
   if(!S._installPrompt){ toast('Install not available in this browser'); return; }
@@ -3350,6 +3390,17 @@ function openSettingsModal(){
     teamStatus.textContent = `Currently a single boards/${b._meta?.filename || '(unsaved)'} file.`;
   }
 
+  // per-board cloud sync toggle (only visible when sync is configured)
+  const syncRow = $('board-sync-row');
+  if(syncRow){
+    if(syncReady()){
+      syncRow.style.display = '';
+      $('board-sync-toggle').checked = !!b._meta?.sync;
+    } else {
+      syncRow.style.display = 'none';
+    }
+  }
+
   // backgrounds
   const bgl = $('settings-bg-list'); bgl.innerHTML = '';
   const cur = b.background || {};
@@ -3574,6 +3625,7 @@ function confirmWelcome(){
 function openPrefsModal(){
   $('prefs-localuser').value = S.settings.localUser || '';
   $('prefs-theme').value = S.settings.theme || 'light';
+  openPrefsSyncFields();
 }
 function savePrefName(name){
   name = (name || '').trim();
@@ -4570,6 +4622,222 @@ document.addEventListener('click', e => {
 });
 
 /* ============================================================
+   Cloud sync (BYO Cloudflare Worker)
+   ============================================================ */
+
+const SYNC_PUSH_DEBOUNCE_MS = 30000;   // 30s after last edit
+const SYNC_PULL_INTERVAL_MS = 60000;   // 60s background pull
+let _syncPushTimer = null;
+let _syncDirtyBoards = new Set();
+let _syncStateByBoard = {};            // id → 'idle' | 'pushing' | 'pulling' | 'error' | 'conflict'
+
+function syncReady(){
+  return !!(S.settings.syncWorkerUrl && S.settings.syncPassword);
+}
+
+function onSyncClick(){
+  openModal('prefs-modal');
+}
+
+function setSyncIndicator(state, msg=''){
+  const el = $('sync-indicator');
+  if(!el) return;
+  if(!syncReady()){
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = 'inline-flex';
+  let icon = '☁️', color = 'var(--header-text-mute)', label = 'idle';
+  if(state === 'syncing'){ icon = '⟳'; label = 'syncing'; color = '#fff8d6'; }
+  else if(state === 'ok'){ icon = '✓☁'; label = 'synced'; color = '#b3f0c2'; }
+  else if(state === 'error'){ icon = '⚠☁'; label = 'error'; color = '#ffb3a8'; }
+  el.textContent = icon;
+  el.style.color = color;
+  el.title = 'Cloud sync — ' + label + (msg ? ' · ' + msg : '');
+}
+
+function openPrefsSyncFields(){
+  $('prefs-sync-url').value   = S.settings.syncWorkerUrl || '';
+  $('prefs-sync-token').value = S.settings.syncToken || '';
+  $('prefs-sync-pass').value  = S.settings.syncPassword || '';
+  $('prefs-deviceid').textContent = S.settings.deviceId || '—';
+}
+
+function saveSyncConfig(){
+  S.settings.syncWorkerUrl = $('prefs-sync-url').value.trim().replace(/\/$/, '');
+  S.settings.syncToken     = $('prefs-sync-token').value;
+  S.settings.syncPassword  = $('prefs-sync-pass').value;
+  storage.saveSettings(S.settings);
+  toast('Sync config saved');
+  setSyncIndicator('idle');
+  testSyncConnection();
+}
+
+async function testSyncConnection(){
+  const status = $('prefs-sync-status');
+  if(!S.settings.syncWorkerUrl){ status.textContent = 'No worker URL'; return; }
+  status.textContent = 'Testing…';
+  try{
+    const res = await fetch(S.settings.syncWorkerUrl + '/list', {
+      headers: { 'X-Sync-Token': S.settings.syncToken || '' }
+    });
+    if(res.ok){ status.textContent = '✓ Connected'; status.style.color = 'var(--ok)'; setSyncIndicator('ok'); }
+    else if(res.status === 401){ status.textContent = '✗ Token rejected'; status.style.color = 'var(--danger)'; setSyncIndicator('error'); }
+    else { status.textContent = '✗ HTTP ' + res.status; status.style.color = 'var(--danger)'; setSyncIndicator('error'); }
+  }catch(e){
+    status.textContent = '✗ ' + e.message; status.style.color = 'var(--danger)'; setSyncIndicator('error');
+  }
+}
+
+function markBoardForSync(boardId){
+  if(!syncReady()) return;
+  const b = S.boards[boardId]; if(!b || !b._meta?.sync) return;
+  _syncDirtyBoards.add(boardId);
+  if(_syncPushTimer) clearTimeout(_syncPushTimer);
+  _syncPushTimer = setTimeout(flushSyncPushes, SYNC_PUSH_DEBOUNCE_MS);
+}
+
+async function flushSyncPushes(){
+  if(!syncReady()) return;
+  const ids = [..._syncDirtyBoards];
+  _syncDirtyBoards.clear();
+  if(!ids.length) return;
+  setSyncIndicator('syncing');
+  for(const id of ids){
+    const b = S.boards[id]; if(!b || !b._meta?.sync) continue;
+    try{ await pushBoard(b); _syncStateByBoard[id] = 'idle'; }
+    catch(e){ console.error('push failed', e); _syncStateByBoard[id] = 'error'; }
+  }
+  setSyncIndicator(Object.values(_syncStateByBoard).some(s => s === 'error') ? 'error' : 'ok');
+}
+
+async function pushBoard(board){
+  const json = stableJson(board);
+  const compressed = await compressBytes(new TextEncoder().encode(json));
+  let payload;
+  if(S.settings.syncPassword){
+    const { salt, iv, ct } = await encryptBytes(compressed, S.settings.syncPassword);
+    const all = new Uint8Array(salt.length + iv.length + ct.length);
+    all.set(salt, 0); all.set(iv, salt.length); all.set(ct, salt.length + iv.length);
+    payload = bytesToB64Url(all);
+  } else {
+    payload = bytesToB64Url(compressed);
+  }
+  const meta = JSON.stringify({
+    lastModifiedBy: S.settings.localUser || 'Unknown',
+    lastModifiedAt: board._meta?.lastModified || now(),
+    deviceId:       S.settings.deviceId,
+    boardName:      board.name,
+    encrypted:      !!S.settings.syncPassword
+  });
+  const res = await fetch(S.settings.syncWorkerUrl + '/board/' + board.id, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'text/plain',
+      'X-Sync-Token': S.settings.syncToken || '',
+      'X-Board-Meta': meta
+    },
+    body: payload
+  });
+  if(!res.ok) throw new Error('Push HTTP ' + res.status);
+}
+
+async function pullBoard(boardId){
+  const res = await fetch(S.settings.syncWorkerUrl + '/board/' + boardId, {
+    headers: { 'X-Sync-Token': S.settings.syncToken || '' }
+  });
+  if(res.status === 404) return null;
+  if(!res.ok) throw new Error('Pull HTTP ' + res.status);
+  let meta = {};
+  try{ meta = JSON.parse(res.headers.get('X-Board-Meta') || '{}'); }catch(_){}
+  const local = S.boards[boardId];
+  if(local && tsMs(local._meta?.lastModified) >= tsMs(meta.lastModifiedAt)){
+    return null;   // local is same or newer
+  }
+  const payload = await res.text();
+  let compressed;
+  try{
+    if(meta.encrypted){
+      if(!S.settings.syncPassword) throw new Error('Board is encrypted — set sync passphrase');
+      const all = b64UrlToBytes(payload);
+      const salt = all.slice(0, 16), iv = all.slice(16, 28), ct = all.slice(28);
+      compressed = await decryptBytes(salt, iv, ct, S.settings.syncPassword);
+    } else {
+      compressed = b64UrlToBytes(payload);
+    }
+  }catch(e){
+    throw new Error('Decrypt failed: ' + e.message);
+  }
+  const inflated = await decompressBytes(compressed);
+  const json = JSON.parse(new TextDecoder().decode(inflated));
+  return { board: migrateLoadedBoard(json), meta };
+}
+
+async function syncPullAll(){
+  if(!syncReady()) return;
+  setSyncIndicator('syncing');
+  try{
+    // discover boards on the remote
+    const res = await fetch(S.settings.syncWorkerUrl + '/list', {
+      headers: { 'X-Sync-Token': S.settings.syncToken || '' }
+    });
+    if(!res.ok) throw new Error('list HTTP ' + res.status);
+    const { boards: remoteList = [] } = await res.json();
+    let updates = 0;
+    for(const r of remoteList){
+      const result = await pullBoard(r.id);
+      if(!result) continue;
+      const { board: incoming, meta } = result;
+      const local = S.boards[incoming.id];
+      if(!local){
+        // brand new board on this device — accept directly
+        S.boards[incoming.id] = incoming;
+        rebuildBoardOrder();
+        await storage.saveBoard(incoming);
+        updates++;
+        continue;
+      }
+      const sameUser = (meta.lastModifiedBy || '') === (S.settings.localUser || '');
+      const sameDevice = (meta.deviceId || '') === (S.settings.deviceId || '');
+      if(sameUser || sameDevice){
+        // tier 1 — same identity, auto-resolve. Snapshot local first.
+        const wasCurrent = (incoming.id === S.currentBoardId);
+        await takeSnapshot('auto-destructive', 'pre-sync');
+        S.boards[incoming.id] = incoming;
+        await storage.saveBoard(incoming);
+        if(wasCurrent) renderAll();
+        toast(`Synced "${incoming.name}" from another device`);
+        updates++;
+      } else {
+        // tier 3 — different user, prompt
+        const choice = await kzConfirm({
+          title: `${meta.lastModifiedBy} edited "${incoming.name}"`,
+          message: `${relTime(meta.lastModifiedAt)} from device ${meta.deviceId}. Keep their version (overwriting yours), or keep yours (will push and overwrite theirs)?`,
+          okLabel: 'Keep theirs',
+          cancelLabel: 'Keep mine'
+        });
+        if(choice){
+          await takeSnapshot('auto-destructive', 'pre-sync (kept theirs)');
+          S.boards[incoming.id] = incoming;
+          await storage.saveBoard(incoming);
+          if(incoming.id === S.currentBoardId) renderAll();
+          toast(`Took ${meta.lastModifiedBy}'s "${incoming.name}"`);
+          updates++;
+        } else {
+          await takeSnapshot('auto-destructive', 'pre-sync (kept mine, overwriting theirs)');
+          await pushBoard(local);
+          toast(`Pushed your "${local.name}" over theirs`);
+          updates++;
+        }
+      }
+    }
+    setSyncIndicator(updates ? 'ok' : 'ok', updates ? `${updates} update(s)` : '');
+  }catch(e){
+    console.error(e); setSyncIndicator('error', e.message);
+  }
+}
+
+/* ============================================================
    init
    ============================================================ */
 
@@ -4601,10 +4869,17 @@ async function init(){
     await storage.saveSettings(S.settings);
   }
 
+  // device id (per-machine, never changes)
+  if(!S.settings.deviceId){
+    S.settings.deviceId = 'dev_' + Math.random().toString(36).slice(2,10);
+    storage.saveSettings(S.settings);
+  }
+
   applyTheme();
   renderAll();
   setSaveIndicator('saved');
   refreshStorageStatus();
+  setSyncIndicator('idle');
   // seed history baseline for the current board (without dirtying)
   if(S.currentBoardId){ pushHistory(); }
   detectShareInHash();
@@ -4626,6 +4901,14 @@ async function init(){
   setInterval(() => { if(S.dirty) flushSave(); }, 5000);
   // file-change polling (5s) — picks up external edits when a folder is connected
   setInterval(pollFsChanges, 5000);
+  // cloud sync periodic pull (60s) when configured
+  setInterval(() => { if(syncReady()) syncPullAll(); }, SYNC_PULL_INTERVAL_MS);
+  // pull on tab visibility return
+  document.addEventListener('visibilitychange', () => { if(!document.hidden && syncReady()) syncPullAll(); });
+  // initial pull on startup once configured
+  if(syncReady()) setTimeout(syncPullAll, 1000);
+  // beforeunload — try to flush any pending pushes
+  window.addEventListener('beforeunload', () => { if(syncReady() && _syncDirtyBoards.size) flushSyncPushes(); });
 
   // PWA install prompt capture
   window.addEventListener('beforeinstallprompt', e => {

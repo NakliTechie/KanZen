@@ -41,6 +41,7 @@ Boards live on your device — as plain `.kanzen.json` files in a folder you cho
 - Folder handle persisted between sessions where the browser allows it (Chrome)
 - 5-second polling for external edits — if you sync via git/Dropbox/iCloud, the other device's changes appear as a "Board updated from disk" toast
 - **Team mode** (per-board toggle): splits a board into `_board.json` + `cards/<id>.json` + `_activity.jsonl` so each card edit touches only that one file. Two people editing different cards never produce a merge conflict. Lossless toggle in both directions.
+- **Cloud sync** (optional, BYO Cloudflare Worker): deploy a [3-minute Worker](worker/README.md) in your own Cloudflare account, set a passphrase in Preferences, and KanZen syncs boards across devices via your own infrastructure. AES-GCM 256 encrypted client-side — the Worker only ever sees ciphertext. Tier-1 conflict resolution (same user, different device) is automatic; tier-3 (different user) prompts. Pre-conflict snapshots are taken before any overwrite.
 - IndexedDB fallback when no folder is connected; "Browser storage only" pill nudges you to wire up a folder
 - Auto-save every 5 s on changes; immediate save on destructive actions
 - Per-board and full-state JSON export / import (merge or replace)

@@ -3,6 +3,12 @@
 !README.md
 !LICENSE
 !.gitignore
+!worker.js
+!worker/
+!worker/wrangler.toml
+!worker/src/
+!worker/src/index.js
+!worker/README.md
 
 # wrangler files
 .wrangler
