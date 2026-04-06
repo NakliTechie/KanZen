@@ -656,8 +656,33 @@
     margin: 0 1px;
   }
   .help-modal table { width: 100%; border-collapse: collapse; }
-  .help-modal td { padding: 6px 8px; vertical-align: top; }
-  .help-modal td:first-child { width: 130px; }
+  .help-modal td { padding: 6px 8px; vertical-align: top; font-size: 13px; }
+  .help-modal td:first-child { width: 110px; color: var(--text-mute); }
+  .help-modal h3 { margin: 0 0 8px; font-size: 13px; }
+  .help-modal p  { margin: 0 0 10px; font-size: 13px; line-height: 1.5; color: var(--text-mute); }
+  .help-modal p strong, .help-modal td strong { color: var(--text); }
+  .help-modal .tab-row {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 14px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .help-modal .tab-row::-webkit-scrollbar { display: none; }
+  .help-modal .tab-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--text-mute);
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .help-modal .tab-btn:hover { color: var(--text); background: transparent; }
+  .help-modal .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .help-modal .tab-pane { display: none; }
+  .help-modal .tab-pane.active { display: block; }
 
   /* ---------- view pills ---------- */
   .view-pill {
@@ -1357,46 +1382,70 @@
       <button onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
-      <p><strong>Kanban without the noise.</strong> Single file, your folder, your data. No server, no account, no board limits.</p>
+      <div class="tab-row" role="tablist">
+        <button class="tab-btn active" data-help-tab="overview" onclick="setHelpTab('overview')">Overview</button>
+        <button class="tab-btn" data-help-tab="header"   onclick="setHelpTab('header')">Header buttons</button>
+        <button class="tab-btn" data-help-tab="board"    onclick="setHelpTab('board')">Board &amp; cards</button>
+        <button class="tab-btn" data-help-tab="views"    onclick="setHelpTab('views')">Views &amp; filters</button>
+        <button class="tab-btn" data-help-tab="keys"     onclick="setHelpTab('keys')">Keyboard &amp; touch</button>
+      </div>
 
-      <h3 style="margin:14px 0 6px;font-size:13px;">Header buttons</h3>
-      <table>
-        <tr><td>📁</td><td>Connect a folder. Each board is then saved as a <code>.kanzen.json</code> file you can read, back up, or sync with Dropbox/iCloud/git. Without a folder, boards live in this browser's IndexedDB and you can still export them.</td></tr>
-        <tr><td>📸</td><td>Snapshots — manual or auto (before destructive actions, optional daily). Pick two snapshots to <em>compare</em> them: card-level diff with added / removed / modified.</td></tr>
-        <tr><td>📜</td><td>Activity feed — every change to the board, with timestamps.</td></tr>
-        <tr><td>🔗</td><td>Share board via URL. The whole board is encoded into the URL hash fragment (compressed, optionally AES-GCM-encrypted with a passphrase). Nothing is uploaded — the recipient's browser decodes it locally. QR code is available for in-person sharing.</td></tr>
-        <tr><td>⚙</td><td>Board settings — name, columns + WIP limits, members, labels, background (8 gradients, 8 solids, custom colour).</td></tr>
-        <tr><td>⇅</td><td>Import / export — KanZen JSON (single board or all boards), CSV, Markdown, or import from Trello (lists, cards, labels, members, checklists).</td></tr>
-        <tr><td>↶ ↷</td><td>Undo / redo — 50 deep per board. <kbd>Cmd/Ctrl+Z</kbd> / <kbd>Shift+Z</kbd> also work.</td></tr>
-        <tr><td>⤓</td><td>Install as an app (only appears when your browser supports the install prompt).</td></tr>
-        <tr><td>◐</td><td>Toggle dark / light theme.</td></tr>
-      </table>
+      <div class="tab-pane active" data-help-pane="overview">
+        <p><strong>Kanban without the noise.</strong> Single HTML file, your folder, your data. No server, no account, no board limits.</p>
+        <h3>Storage</h3>
+        <p>Click <strong>📁</strong> to connect a folder. KanZen will write each board as a plain <code>.kanzen.json</code> file you can read, back up, or sync with Dropbox / iCloud / Syncthing / git — multi-device for free. Without a folder, boards live in this browser's IndexedDB and you can still export them as JSON.</p>
+        <h3>Auto-save</h3>
+        <p>Auto-save runs every 5 seconds when there are unsaved changes; destructive actions (delete card / column / board) save immediately. Snapshots (📸) capture the full board so you can compare or restore. Auto-snapshot before destructive actions is on by default.</p>
+        <h3>Privacy</h3>
+        <p>Nothing leaves your machine. Even share URLs encode the board into the hash fragment, which is never sent to any server — not even to the host where this site lives.</p>
+      </div>
 
-      <h3 style="margin:14px 0 6px;font-size:13px;">Views</h3>
-      <p style="font-size:12px;color:var(--text-mute);">Switch between <strong>Board</strong> (kanban), <strong>List</strong> (sortable table — click any column header to sort), and <strong>Calendar</strong> (month grid — drag a card between days to set its due date) using the pills on the right of the filter bar. The view sticks per board.</p>
+      <div class="tab-pane" data-help-pane="header">
+        <table>
+          <tr><td>📁</td><td><strong>Connect folder.</strong> Save boards to disk as <code>.kanzen.json</code> files.</td></tr>
+          <tr><td>📸</td><td><strong>Snapshots.</strong> Take, restore, or compare snapshots — card-level diff with added / removed / modified. Auto-snap before destructive actions and optional daily auto-snap.</td></tr>
+          <tr><td>📜</td><td><strong>Activity feed.</strong> Every change to the board with relative timestamps.</td></tr>
+          <tr><td>🔗</td><td><strong>Share.</strong> The whole board encoded into a URL hash fragment, optionally AES-GCM-encrypted with a passphrase. Compressed with pako, with a size gate (green ≤8 K, yellow ≤64 K, blocked beyond). QR code for in-person handoff.</td></tr>
+          <tr><td>⚙</td><td><strong>Settings.</strong> Board name, columns, WIP limits, members, labels, background (8 gradients, 8 solids, custom).</td></tr>
+          <tr><td>⇅</td><td><strong>Import / export.</strong> KanZen JSON, CSV, Markdown, or Trello JSON import.</td></tr>
+          <tr><td>↶ ↷</td><td><strong>Undo / redo.</strong> 50 deep per board.</td></tr>
+          <tr><td>⤓</td><td><strong>Install.</strong> Add as an app (only appears when the browser exposes the prompt).</td></tr>
+          <tr><td>◐</td><td><strong>Theme.</strong> Toggle dark / light.</td></tr>
+        </table>
+      </div>
 
-      <h3 style="margin:14px 0 6px;font-size:13px;">Cards</h3>
-      <p style="font-size:12px;color:var(--text-mute);">Click any card to edit. You get a markdown description (with live preview), checklist with progress bar, due date, priority, labels, members, file attachments (embedded in the board JSON), and threaded comments. Comment counts and checklist progress show on the card face.</p>
+      <div class="tab-pane" data-help-pane="board">
+        <h3>Cards</h3>
+        <p>Click any card to edit. You get a markdown description (live preview), checklist with progress bar, due date, priority, labels, members, file attachments (embedded in the board JSON), and threaded comments. The card face shows label chips, priority badge, due date, members, checklist progress, attachment count, and 💬 comment count.</p>
+        <h3>Columns</h3>
+        <p>Add, rename, reorder by dragging the header, collapse to save space. Set a soft WIP limit per column — KanZen highlights it when you exceed it but doesn't block you.</p>
+        <h3>Drag &amp; drop</h3>
+        <p>Drag cards between or within columns. Drag column headers to reorder columns. On the calendar view, drag a card between days to update its due date.</p>
+      </div>
 
-      <h3 style="margin:14px 0 6px;font-size:13px;">Filters</h3>
-      <p style="font-size:12px;color:var(--text-mute);">Filter by label, priority, due-date bucket (overdue / today / this week / no date), or member. Non-matching cards <em>dim</em> instead of hiding, so you keep the board's shape and your WIP limits stay meaningful.</p>
+      <div class="tab-pane" data-help-pane="views">
+        <h3>Three views</h3>
+        <p>Switch between <strong>Board</strong> (kanban), <strong>List</strong> (sortable table — click any column header to sort), and <strong>Calendar</strong> (month grid — drag a card between days to set its due date) using the pills on the right of the filter bar. The view sticks per board.</p>
+        <h3>Filters</h3>
+        <p>Filter by label, priority, due-date bucket (overdue / today / this week / no date), or member. Non-matching cards <em>dim</em> instead of hiding, so you keep the board's shape and your WIP limits stay meaningful.</p>
+        <h3>Search</h3>
+        <p>Press <kbd>/</kbd> to focus the search box. Matches both card titles and descriptions; same dimming behaviour as filters.</p>
+      </div>
 
-      <h3 style="margin:14px 0 6px;font-size:13px;">Keyboard shortcuts</h3>
-      <table>
-        <tr><td><kbd>N</kbd></td><td>New card in the focused column (or the first column)</td></tr>
-        <tr><td><kbd>E</kbd> / <kbd>Enter</kbd></td><td>Edit focused card</td></tr>
-        <tr><td><kbd>/</kbd></td><td>Focus search</td></tr>
-        <tr><td><kbd>← → ↑ ↓</kbd></td><td>Move card focus</td></tr>
-        <tr><td><kbd>Cmd/Ctrl+Z</kbd></td><td>Undo</td></tr>
-        <tr><td><kbd>Cmd/Ctrl+Shift+Z</kbd></td><td>Redo</td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>Close modals</td></tr>
-      </table>
-
-      <h3 style="margin:14px 0 6px;font-size:13px;">Touch</h3>
-      <p style="font-size:12px;color:var(--text-mute);">Long-press a card to bring up a "Move to…" popover with all other columns.</p>
-
-      <h3 style="margin:14px 0 6px;font-size:13px;">Storage details</h3>
-      <p style="font-size:12px;color:var(--text-mute);">Auto-save runs every 5 seconds when there are changes; destructive actions (delete card / column / board) save immediately. The folder on disk is the source of truth — drop it in any sync tool (Dropbox, iCloud, Syncthing, git) and you have free multi-device sync. Each board is one human-readable JSON file you can grep, diff, or open in any text editor.</p>
+      <div class="tab-pane" data-help-pane="keys">
+        <h3>Keyboard</h3>
+        <table>
+          <tr><td><kbd>N</kbd></td><td>New card in the focused column (or first column)</td></tr>
+          <tr><td><kbd>E</kbd> / <kbd>Enter</kbd></td><td>Edit focused card</td></tr>
+          <tr><td><kbd>/</kbd></td><td>Focus search</td></tr>
+          <tr><td><kbd>← → ↑ ↓</kbd></td><td>Move card focus</td></tr>
+          <tr><td><kbd>Cmd/Ctrl+Z</kbd></td><td>Undo</td></tr>
+          <tr><td><kbd>Cmd/Ctrl+Shift+Z</kbd></td><td>Redo</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close modals</td></tr>
+        </table>
+        <h3>Touch</h3>
+        <p>Long-press any card to bring up a "Move to…" popover with all other columns.</p>
+      </div>
     </div>
     <div class="modal-footer">
       <div class="spacer"></div>
@@ -2227,6 +2276,10 @@ function calToday(){
   const d = new Date();
   S.calMonth = { y: d.getFullYear(), m: d.getMonth() };
   renderBoard();
+}
+function setHelpTab(name){
+  for(const b of document.querySelectorAll('.help-modal .tab-btn')) b.classList.toggle('active', b.dataset.helpTab === name);
+  for(const p of document.querySelectorAll('.help-modal .tab-pane')) p.classList.toggle('active', p.dataset.helpPane === name);
 }
 async function triggerInstall(){
   if(!S._installPrompt){ toast('Install not available in this browser'); return; }
