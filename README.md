@@ -40,6 +40,7 @@ Boards live on your device — as plain `.kanzen.json` files in a folder you cho
 - Stable filenames that survive board renames (no orphaned files on disk)
 - Folder handle persisted between sessions where the browser allows it (Chrome)
 - 5-second polling for external edits — if you sync via git/Dropbox/iCloud, the other device's changes appear as a "Board updated from disk" toast
+- **Team mode** (per-board toggle): splits a board into `_board.json` + `cards/<id>.json` + `_activity.jsonl` so each card edit touches only that one file. Two people editing different cards never produce a merge conflict. Lossless toggle in both directions.
 - IndexedDB fallback when no folder is connected; "Browser storage only" pill nudges you to wire up a folder
 - Auto-save every 5 s on changes; immediate save on destructive actions
 - Per-board and full-state JSON export / import (merge or replace)

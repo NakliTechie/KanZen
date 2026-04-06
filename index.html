@@ -1291,6 +1291,14 @@
         <span class="label-txt">Board background</span>
         <div id="settings-bg-list"></div>
       </div>
+      <div class="field">
+        <span class="label-txt">Team mode</span>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--text-mute);" id="team-mode-row">
+          <input type="checkbox" id="team-mode-toggle" style="width:auto;margin-top:2px;" onchange="onTeamModeToggle(this.checked)">
+          <span><strong style="color:var(--text);">Split this board into per-card files</strong> for git-friendly multi-user collaboration. <em>Requires a connected folder. Each card becomes its own JSON file in a per-board directory; the activity log is appended as JSONL.</em></span>
+        </label>
+        <div id="team-mode-status" style="font-size:11px;color:var(--text-faint);margin-top:6px;"></div>
+      </div>
     </div>
     <div class="modal-footer">
       <div class="spacer"></div>
@@ -1512,6 +1520,8 @@
         <p>Click <strong>📁</strong> to connect a folder. KanZen writes each board as a sorted-key, pretty-printed <code>.kanzen.json</code> file you can read, back up, sync with Dropbox / iCloud / Syncthing / git — multi-device for free, no server. The folder handle is remembered between sessions in browsers that support it (Chrome). Without a folder, boards live in this browser's IndexedDB and you can still export them as JSON anytime.</p>
         <h3>External edits</h3>
         <p>When a folder is connected, KanZen polls the disk every 5 seconds. If another tool (or another device via git/Dropbox) changes a board file, KanZen reloads it automatically and toasts "<em>Board updated from disk</em>". Your own writes are write-locked for 2 s so you never see your own save bounce back at you.</p>
+        <h3>Team mode</h3>
+        <p>For boards you collaborate on via git, Settings → Team mode splits the board into a folder: <code>_board.json</code> (columns, members, labels), <code>cards/&lt;id&gt;.json</code> (one file per card), and <code>_activity.jsonl</code> (append-only log). Each card edit only rewrites that card's file, so two people editing different cards never produce a merge conflict. Lossless toggle in both directions.</p>
         <h3>Auto-save</h3>
         <p>Auto-save runs every 5 seconds when there are unsaved changes; destructive actions (delete card / column / board) save immediately. Snapshots (📸) capture the full board so you can compare or restore. Auto-snapshot before destructive actions is on by default.</p>
         <h3>Privacy</h3>
@@ -1865,13 +1875,119 @@ const StorageFS = {
     return await this.dirHandle.getDirectoryHandle('boards', { create:true });
   },
   /* stable filename: stored in board._meta.filename on first save and never re-derived,
-     so renaming a board no longer orphans the old file on disk */
+     so renaming a board no longer orphans the old file on disk.
+     For team-mode boards this is the directory name (without .kanzen.json suffix). */
   fileNameFor(board){
     if(board._meta?.filename) return board._meta.filename;
-    const fn = slugify(board.name) + '-' + board.id.slice(0,4) + '.kanzen.json';
+    const base = slugify(board.name) + '-' + board.id.slice(0,4);
+    const fn = board._meta?.teamMode ? base : (base + '.kanzen.json');
     if(!board._meta) board._meta = { boardId: board.id, lastModified: now(), kanzenVersion: 1 };
     board._meta.filename = fn;
     return fn;
+  },
+  /* a team-mode board lives in boards/<dirname>/ with _board.json + cards/ + _activity.jsonl */
+  async readTeamBoard(dirHandle, boardDirName){
+    const boardFh = await dirHandle.getFileHandle('_board.json');
+    const text = await (await boardFh.getFile()).text();
+    const board = JSON.parse(text);
+    if(!board._meta) board._meta = {};
+    board._meta.teamMode = true;
+    board._meta.filename = boardDirName;
+    board.cards = {};
+    // cards/ subdirectory
+    try{
+      const cardsDir = await dirHandle.getDirectoryHandle('cards');
+      for await (const [name, entry] of cardsDir.entries()){
+        if(entry.kind !== 'file' || !name.endsWith('.json')) continue;
+        try{
+          const c = JSON.parse(await (await entry.getFile()).text());
+          if(c?.id) board.cards[c.id] = c;
+        }catch(_){}
+      }
+    }catch(_){}
+    // _activity.jsonl
+    board.activity = [];
+    try{
+      const actFh = await dirHandle.getFileHandle('_activity.jsonl');
+      const text = await (await actFh.getFile()).text();
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      for(const line of lines){
+        try{ board.activity.push(JSON.parse(line)); }catch(_){}
+      }
+      board.activity.reverse();   // file is chronological; in-memory is newest-first
+    }catch(_){}
+    board._activityFlushed = board.activity.length;   // none of these are pending
+    return board;
+  },
+  async writeTeamBoard(boardsDir, board){
+    const dirName = this.fileNameFor(board);
+    const boardDir = await boardsDir.getDirectoryHandle(dirName, { create:true });
+    // 1. _board.json — everything except cards / activity / runtime fields
+    const meta = {};
+    for(const k of Object.keys(board)){
+      if(k === 'cards' || k === 'activity' || k.startsWith('_')) continue;
+      meta[k] = board[k];
+    }
+    meta._meta = { ...(board._meta || {}), teamMode: true, lastModified: now() };
+    delete meta._meta.filename;  // filename is the dir name itself, no need to duplicate
+    {
+      const fh = await boardDir.getFileHandle('_board.json', { create:true });
+      const w = await fh.createWritable();
+      markWriteLock();
+      await w.write(stableJson(meta));
+      await w.close();
+    }
+    // 2. cards/ — only the dirty ones (or all on first write)
+    const cardsDir = await boardDir.getDirectoryHandle('cards', { create:true });
+    const dirty = board._dirtyCards instanceof Set ? board._dirtyCards : new Set(Object.keys(board.cards || {}));
+    for(const cardId of dirty){
+      const c = board.cards?.[cardId];
+      if(!c) continue;
+      const fh = await cardsDir.getFileHandle(cardId + '.json', { create:true });
+      const w = await fh.createWritable();
+      markWriteLock();
+      await w.write(stableJson(c));
+      await w.close();
+    }
+    // 3. delete removed cards
+    const deleted = board._deletedCards instanceof Set ? board._deletedCards : new Set();
+    for(const cardId of deleted){
+      try{ await cardsDir.removeEntry(cardId + '.json'); }catch(_){}
+    }
+    // 4. _activity.jsonl — append only the new entries since last flush
+    const flushed = board._activityFlushed || 0;
+    const newCount = (board.activity?.length || 0) - flushed;
+    if(newCount > 0){
+      // newest are at the front of the in-memory array; chronological for the file = oldest first
+      const newEntries = board.activity.slice(0, newCount).slice().reverse();
+      const lines = newEntries.map(a => JSON.stringify(a)).join('\n') + '\n';
+      const fh = await boardDir.getFileHandle('_activity.jsonl', { create:true });
+      // append: read existing, concat, rewrite (createWritable doesn't have a true append mode)
+      let existing = '';
+      try{ existing = await (await fh.getFile()).text(); }catch(_){}
+      const w = await fh.createWritable();
+      markWriteLock();
+      await w.write(existing + lines);
+      await w.close();
+      board._activityFlushed = board.activity.length;
+    }
+    // clear dirty trackers
+    board._dirtyCards = new Set();
+    board._deletedCards = new Set();
+  },
+  async deleteTeamBoardDir(boardsDir, dirName){
+    try{
+      // recursive removal in two passes: cards/ first, then _board, then directory
+      const dir = await boardsDir.getDirectoryHandle(dirName);
+      try{
+        const cardsDir = await dir.getDirectoryHandle('cards');
+        for await (const [name] of cardsDir.entries()) await cardsDir.removeEntry(name);
+        await dir.removeEntry('cards');
+      }catch(_){}
+      try{ await dir.removeEntry('_board.json'); }catch(_){}
+      try{ await dir.removeEntry('_activity.jsonl'); }catch(_){}
+      await boardsDir.removeEntry(dirName);
+    }catch(_){}
   },
   async loadAll(){
     const boards = {};
@@ -1879,14 +1995,25 @@ const StorageFS = {
     try{
       const boardsDir = await this.ensureBoardsDir();
       for await (const [name, entry] of boardsDir.entries()){
-        if(entry.kind !== 'file') continue;
-        if(!name.endsWith('.kanzen.json')) continue;
-        try{
-          const file = await entry.getFile();
-          const text = await file.text();
-          const json = JSON.parse(text);
-          if(json && json.id) boards[json.id] = json;
-        }catch(e){ console.warn('Failed to load', name, e); }
+        if(entry.kind === 'file' && name.endsWith('.kanzen.json')){
+          try{
+            const file = await entry.getFile();
+            const text = await file.text();
+            const json = JSON.parse(text);
+            if(json && json.id){
+              if(!json._meta) json._meta = {};
+              json._meta.filename = name;
+              json._meta.teamMode = false;
+              boards[json.id] = json;
+            }
+          }catch(e){ console.warn('Failed to load', name, e); }
+        } else if(entry.kind === 'directory'){
+          // a subdirectory under boards/ → potentially a team-mode board
+          try{
+            const teamBoard = await this.readTeamBoard(entry, name);
+            if(teamBoard?.id) boards[teamBoard.id] = teamBoard;
+          }catch(_){ /* not a team board, ignore */ }
+        }
       }
     }catch(e){ console.warn('FS loadAll boards failed', e); }
     try{
@@ -1898,14 +2025,23 @@ const StorageFS = {
   },
   async saveBoard(board){
     const boardsDir = await this.ensureBoardsDir();
+    if(board._meta?.teamMode){
+      return this.writeTeamBoard(boardsDir, board);
+    }
     const fh = await boardsDir.getFileHandle(this.fileNameFor(board), { create:true });
     const w = await fh.createWritable();
     markWriteLock();
     await w.write(stableJson(board));
     await w.close();
+    // clear dirty trackers (used by undo/redo too)
+    if(board._dirtyCards) board._dirtyCards = new Set();
+    if(board._deletedCards) board._deletedCards = new Set();
   },
   async deleteBoard(board){
     const boardsDir = await this.ensureBoardsDir();
+    if(board._meta?.teamMode){
+      return this.deleteTeamBoardDir(boardsDir, this.fileNameFor(board));
+    }
     try{ await boardsDir.removeEntry(this.fileNameFor(board)); }catch(_){ }
   },
   async saveSettings(settings){
@@ -2166,6 +2302,18 @@ function stampCard(card){
   card.lastModifiedBy = S.settings.localUser || 'Unknown';
   card.lastModifiedAt = now();
   card.updatedAt = card.lastModifiedAt;
+  markCardDirty(card.id);
+}
+function markCardDirty(cardId){
+  const b = currentBoard(); if(!b) return;
+  if(!b._dirtyCards) b._dirtyCards = new Set();
+  b._dirtyCards.add(cardId);
+}
+function markCardDeleted(cardId){
+  const b = currentBoard(); if(!b) return;
+  if(!b._deletedCards) b._deletedCards = new Set();
+  b._deletedCards.add(cardId);
+  if(b._dirtyCards) b._dirtyCards.delete(cardId);
 }
 function currentBoard(){ return S.currentBoardId ? S.boards[S.currentBoardId] : null; }
 function rebuildBoardOrder(){
@@ -2896,6 +3044,7 @@ async function deleteCardConfirm(){
   await maybeAutoSnapshot('destructive');
   const col = findColumnByCard(b, card.id);
   if(col) col.cardIds = col.cardIds.filter(x => x !== card.id);
+  markCardDeleted(card.id);
   delete b.cards[card.id];
   logActivity('card_deleted', { cardId: card.id, cardTitle: card.title, detail: { column: col?.name } });
   pushHistory();
@@ -3187,6 +3336,20 @@ function openSettingsModal(){
     row.children[1].onclick = () => { b.members = b.members.filter(x => x.id !== m.id); openSettingsModal(); };
     ml.appendChild(row);
   }
+  // team mode toggle
+  const teamToggle = $('team-mode-toggle');
+  const teamStatus = $('team-mode-status');
+  const isFs = S.storageMode === 'fs';
+  teamToggle.checked  = !!b._meta?.teamMode;
+  teamToggle.disabled = !isFs;
+  if(!isFs){
+    teamStatus.textContent = 'Connect a folder to enable team mode.';
+  } else if(b._meta?.teamMode){
+    teamStatus.textContent = `On disk as boards/${b._meta.filename}/ — _board.json + cards/<id>.json + _activity.jsonl.`;
+  } else {
+    teamStatus.textContent = `Currently a single boards/${b._meta?.filename || '(unsaved)'} file.`;
+  }
+
   // backgrounds
   const bgl = $('settings-bg-list'); bgl.innerHTML = '';
   const cur = b.background || {};
@@ -4041,6 +4204,83 @@ async function loadSharedBoard(){
 }
 
 /* ============================================================
+   Team mode toggle / conversion
+   ============================================================ */
+
+async function onTeamModeToggle(on){
+  const b = currentBoard(); if(!b) return;
+  if(S.storageMode !== 'fs'){
+    toast('Connect a folder first');
+    $('team-mode-toggle').checked = !!b._meta?.teamMode;
+    return;
+  }
+  if(on && b._meta?.teamMode) return;          // already on
+  if(!on && !b._meta?.teamMode) return;        // already off
+  if(on){
+    if(!await kzConfirm({
+      title:'Switch to team mode?',
+      message:'KanZen will split this board into a folder containing _board.json, cards/<id>.json, and _activity.jsonl. The original .kanzen.json file will be deleted. The conversion is lossless and reversible.',
+      okLabel:'Switch on'
+    })){ $('team-mode-toggle').checked = false; return; }
+    try{
+      await convertSoloToTeam(b);
+      toast('Team mode on');
+      openSettingsModal();
+    }catch(e){
+      console.error(e); toast('Conversion failed: ' + e.message);
+      $('team-mode-toggle').checked = false;
+    }
+  } else {
+    if(!await kzConfirm({
+      title:'Switch to solo mode?',
+      message:'KanZen will collapse the per-card files back into a single .kanzen.json. The team-mode directory will be deleted. The conversion is lossless and reversible.',
+      okLabel:'Switch off'
+    })){ $('team-mode-toggle').checked = true; return; }
+    try{
+      await convertTeamToSolo(b);
+      toast('Team mode off');
+      openSettingsModal();
+    }catch(e){
+      console.error(e); toast('Conversion failed: ' + e.message);
+      $('team-mode-toggle').checked = true;
+    }
+  }
+}
+
+async function convertSoloToTeam(board){
+  // remember the old solo filename so we can delete it after the team write succeeds
+  const oldFilename = board._meta?.filename;
+  // fresh team-mode metadata
+  if(!board._meta) board._meta = { boardId: board.id, kanzenVersion: 1 };
+  board._meta.teamMode = true;
+  delete board._meta.filename;                             // force re-derivation as a directory name
+  board._dirtyCards   = new Set(Object.keys(board.cards || {}));   // write every card
+  board._activityFlushed = 0;                              // write the entire activity log
+  await storage.saveBoard(board);
+  // delete the old single-file board
+  if(oldFilename && oldFilename.endsWith('.kanzen.json') && S.storageMode === 'fs'){
+    try{
+      const boardsDir = await StorageFS.ensureBoardsDir();
+      await boardsDir.removeEntry(oldFilename);
+    }catch(e){ console.warn('Could not delete old solo file', e); }
+  }
+}
+
+async function convertTeamToSolo(board){
+  const oldDirName = board._meta?.filename;
+  board._meta.teamMode = false;
+  delete board._meta.filename;                             // re-derive as <slug>-<id4>.kanzen.json
+  await storage.saveBoard(board);
+  // delete the old team-mode directory
+  if(oldDirName && S.storageMode === 'fs'){
+    try{
+      const boardsDir = await StorageFS.ensureBoardsDir();
+      await StorageFS.deleteTeamBoardDir(boardsDir, oldDirName);
+    }catch(e){ console.warn('Could not delete old team dir', e); }
+  }
+}
+
+/* ============================================================
    Trello import
    ============================================================ */
 
@@ -4366,6 +4606,8 @@ async function init(){
   // expose for tests
   window.flushSave = flushSave;
   window.scheduleSave = scheduleSave;
+  window.StorageFS = StorageFS;
+  window.storage = storage;
 }
 
 init();
