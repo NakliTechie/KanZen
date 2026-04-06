@@ -1,0 +1,2092 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="Chirag Patnaik">
+<meta name="description" content="KanZen — Kanban without the noise. Single-file local-first kanban. No server, no account, no board limits.">
+<title>KanZen — Kanban without the noise</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%234f46e5'/%3E%3Ctext x='16' y='21' font-family='-apple-system,system-ui,sans-serif' font-size='14' font-weight='700' fill='white' text-anchor='middle'%3EKZ%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    /* Trello-style palette */
+    --board-bg: linear-gradient(135deg, #0079bf 0%, #5067c5 100%);
+    --header-bg: rgba(0,0,0,0.18);
+    --header-border: rgba(255,255,255,0.18);
+    --header-text: #ffffff;
+    --header-text-mute: rgba(255,255,255,0.85);
+    --header-input-bg: rgba(255,255,255,0.22);
+    --header-input-bg-hover: rgba(255,255,255,0.32);
+    --header-input-text: #ffffff;
+    --header-input-placeholder: rgba(255,255,255,0.7);
+
+    --bg: #f4f5f7;
+    --bg-elev: #ffffff;
+    --bg-column: #ebecf0;
+    --bg-card: #ffffff;
+    --border: #dfe1e6;
+    --border-strong: #c1c7d0;
+    --text: #172b4d;
+    --text-mute: #5e6c84;
+    --text-faint: #97a0af;
+    --accent: #0079bf;
+    --accent-hover: #026aa7;
+    --danger: #eb5a46;
+    --warn: #f2a900;
+    --ok: #61bd4f;
+    --shadow: 0 1px 0 rgba(9,30,66,0.25);
+    --shadow-card: 0 1px 0 rgba(9,30,66,0.25);
+    --shadow-card-hover: 0 4px 8px rgba(9,30,66,0.2), 0 0 1px rgba(9,30,66,0.3);
+    --shadow-lg: 0 12px 24px -6px rgba(9,30,66,0.25), 0 0 1px rgba(9,30,66,0.31);
+    --radius: 3px;
+    --radius-lg: 12px;
+  }
+  [data-theme="dark"] {
+    --board-bg: linear-gradient(135deg, #1d2125 0%, #22272b 100%);
+    --header-bg: rgba(0,0,0,0.4);
+    --header-border: rgba(255,255,255,0.1);
+    --header-text: #b6c2cf;
+    --header-text-mute: #9fadbc;
+    --header-input-bg: rgba(255,255,255,0.08);
+    --header-input-bg-hover: rgba(255,255,255,0.14);
+    --header-input-text: #b6c2cf;
+    --header-input-placeholder: #738496;
+
+    --bg: #1d2125;
+    --bg-elev: #282e33;
+    --bg-column: #101204;
+    --bg-column: #101204;
+    --bg-column: #22272b;
+    --bg-card: #2c333a;
+    --border: #38434f;
+    --border-strong: #4f5b66;
+    --text: #b6c2cf;
+    --text-mute: #9fadbc;
+    --text-faint: #738496;
+    --accent: #579dff;
+    --accent-hover: #85b8ff;
+    --shadow-card: 0 1px 0 rgba(0,0,0,0.5);
+    --shadow-card-hover: 0 4px 8px rgba(0,0,0,0.5), 0 0 1px rgba(0,0,0,0.7);
+    --shadow-lg: 0 12px 24px -6px rgba(0,0,0,0.6);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Emoji", "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji";
+    font-size: 14px;
+    color: var(--text);
+    background: var(--board-bg);
+    background-attachment: fixed;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  button {
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, box-shadow 0.1s;
+    font-weight: 500;
+  }
+  button:hover { background: rgba(9,30,66,0.08); }
+  [data-theme="dark"] button:hover { background: rgba(255,255,255,0.08); }
+  button.btn-primary {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 1px 0 rgba(9,30,66,0.25);
+  }
+  button.btn-primary:hover { background: var(--accent-hover); }
+  button.btn-danger { color: var(--danger); }
+  button.btn-danger:hover { background: rgba(235,90,70,0.15); }
+  button.btn-ghost {
+    background: rgba(9,30,66,0.04);
+    color: var(--text);
+  }
+  button.btn-ghost:hover { background: rgba(9,30,66,0.08); }
+  [data-theme="dark"] button.btn-ghost { background: rgba(255,255,255,0.06); }
+  [data-theme="dark"] button.btn-ghost:hover { background: rgba(255,255,255,0.12); }
+  input, textarea, select {
+    font-family: inherit;
+    font-size: inherit;
+    color: var(--text);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 10px;
+    outline: none;
+    width: 100%;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; font-family: inherit; }
+  label.field { display: block; margin-bottom: 12px; }
+  label.field > .label-txt { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-mute); margin-bottom: 4px; font-weight: 600; }
+
+  /* ---------- header ---------- */
+  header.app-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--header-bg);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--header-border);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    color: var(--header-text);
+  }
+  header.app-header button { color: var(--header-text); }
+  header.app-header button:hover { background: var(--header-input-bg-hover); }
+  .brand {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--header-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+    padding: 4px 8px 4px 4px;
+  }
+  .brand-mark {
+    width: 24px; height: 24px;
+    background: white;
+    color: #0079bf;
+    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .header-divider {
+    width: 1px;
+    height: 22px;
+    background: var(--header-border);
+    margin: 0 2px;
+  }
+  .board-switcher {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .board-switcher select {
+    width: auto;
+    min-width: 160px;
+    max-width: 280px;
+    background: var(--header-input-bg);
+    color: var(--header-input-text);
+    border: none;
+    border-radius: var(--radius);
+    padding: 6px 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .board-switcher select:hover { background: var(--header-input-bg-hover); }
+  .board-switcher select option { color: var(--text); background: var(--bg-elev); }
+  .save-indicator {
+    font-size: 12px;
+    color: var(--header-text-mute);
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: var(--header-input-bg);
+    user-select: none;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .save-indicator.saving { color: #fff8d6; }
+  .save-indicator.saved  { color: #b3f0c2; }
+  .save-indicator.dirty  { color: var(--header-text-mute); }
+  .save-indicator.error  { color: #ffb3a8; }
+  .header-search {
+    flex: 1;
+    min-width: 140px;
+    max-width: 360px;
+    background: var(--header-input-bg);
+    color: var(--header-input-text);
+    border: none;
+    padding: 7px 12px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    transition: background 0.1s;
+  }
+  .header-search::placeholder { color: var(--header-input-placeholder); }
+  .header-search:focus { background: white; color: var(--text); }
+  .header-search:focus::placeholder { color: var(--text-faint); }
+  .help-btn {
+    margin-left: auto;
+    width: 30px; height: 30px;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--header-input-bg);
+    color: var(--header-text);
+    font-weight: 700;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .help-btn:hover { background: var(--header-input-bg-hover); }
+  .header-actions {
+    margin-left: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .icon-btn {
+    width: 32px; height: 32px;
+    padding: 0;
+    background: var(--header-input-bg);
+    color: var(--header-text);
+    border-radius: var(--radius);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+  .icon-btn:hover { background: var(--header-input-bg-hover); }
+
+  /* ---------- filter bar ---------- */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--header-bg);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--header-border);
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--header-text-mute);
+  }
+  .filter-bar select {
+    width: auto;
+    padding: 5px 10px;
+    font-size: 12px;
+    background: var(--header-input-bg);
+    color: var(--header-input-text);
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .filter-bar select:hover { background: var(--header-input-bg-hover); }
+  .filter-bar select option { color: var(--text); background: var(--bg-elev); }
+  .filter-bar .clear-filters {
+    color: var(--header-text);
+    cursor: pointer;
+    text-decoration: underline;
+    font-weight: 500;
+  }
+  .filter-bar .clear-filters:hover { color: white; }
+
+  /* ---------- board ---------- */
+  main.board-area {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 12px 14px 80px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    scroll-behavior: smooth;
+  }
+  .empty-state {
+    margin: auto;
+    padding: 40px;
+    text-align: center;
+    color: white;
+    max-width: 480px;
+    background: rgba(0,0,0,0.18);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(6px);
+  }
+  .empty-state h2 { color: white; margin-bottom: 8px; }
+  .empty-state p { color: rgba(255,255,255,0.85); }
+
+  .column {
+    flex: 0 0 272px;
+    background: var(--bg-column);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 145px);
+    border: 2px solid transparent;
+    box-shadow: 0 1px 0 rgba(9,30,66,0.25);
+  }
+  .column.drag-over { border-color: rgba(255,255,255,0.7); }
+  .column.collapsed { flex: 0 0 44px; }
+  .column.collapsed .col-body, .column.collapsed .col-footer { display: none; }
+  .column.collapsed .col-header { writing-mode: vertical-rl; transform: rotate(180deg); padding: 12px 4px; min-height: 200px; }
+  .column.collapsed .col-actions { display: none; }
+  .col-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 8px 6px 12px;
+    cursor: grab;
+  }
+  .col-header:active { cursor: grabbing; }
+  .col-name {
+    flex: 1;
+    font-weight: 600;
+    font-size: 14px;
+    border: 2px solid transparent;
+    padding: 4px 6px;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    min-width: 0;
+  }
+  .col-name:hover { background: rgba(9,30,66,0.06); }
+  .col-name:focus { background: var(--bg-elev); border-color: var(--accent); }
+  [data-theme="dark"] .col-name:hover { background: rgba(255,255,255,0.06); }
+  .col-count {
+    font-size: 12px;
+    color: var(--text-mute);
+    background: rgba(9,30,66,0.08);
+    padding: 2px 8px;
+    border-radius: 10px;
+    user-select: none;
+    font-weight: 600;
+  }
+  [data-theme="dark"] .col-count { background: rgba(255,255,255,0.08); }
+  .col-count.over-wip { background: rgba(235,90,70,0.2); color: var(--danger); }
+  .col-actions { display: flex; gap: 0; }
+  .col-actions button {
+    padding: 4px 8px;
+    font-size: 14px;
+    color: var(--text-mute);
+    border-radius: var(--radius);
+  }
+  .col-actions button:hover { background: rgba(9,30,66,0.08); color: var(--text); }
+  [data-theme="dark"] .col-actions button:hover { background: rgba(255,255,255,0.08); }
+  .col-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 8px;
+    min-height: 8px;
+  }
+  .col-footer {
+    padding: 4px 8px 8px;
+  }
+  .add-card-btn {
+    width: 100%;
+    text-align: left;
+    color: var(--text-mute);
+    font-size: 14px;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    font-weight: 500;
+  }
+  .add-card-btn:hover { background: rgba(9,30,66,0.08); color: var(--text); }
+  [data-theme="dark"] .add-card-btn:hover { background: rgba(255,255,255,0.08); }
+
+  /* "Add column" tile that lives at the right edge of the board */
+  .column.add-col-tile {
+    background: rgba(255,255,255,0.24);
+    backdrop-filter: blur(4px);
+    box-shadow: none;
+    border: none;
+  }
+  .column.add-col-tile button {
+    color: white;
+    font-weight: 600;
+  }
+  .column.add-col-tile button:hover { background: rgba(255,255,255,0.16); }
+  [data-theme="dark"] .column.add-col-tile { background: rgba(255,255,255,0.08); }
+
+  /* ---------- card ---------- */
+  .card {
+    background: var(--bg-card);
+    border-radius: 8px;
+    padding: 8px 12px 10px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-card);
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: opacity 0.15s, box-shadow 0.12s, border-color 0.1s, transform 0.05s;
+    position: relative;
+  }
+  .card:hover { box-shadow: var(--shadow-card-hover); }
+  .card.focused { border-color: var(--accent); }
+  .card.dragging { opacity: 0.35; transform: rotate(3deg); }
+  .card.dim { opacity: 0.28; pointer-events: none; filter: grayscale(0.4); }
+  .card-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+  .label-chip {
+    height: 8px;
+    min-width: 40px;
+    border-radius: 4px;
+    font-size: 0;
+    box-shadow: 0 1px 0 rgba(9,30,66,0.1);
+  }
+  .label-chip.named {
+    font-size: 11px;
+    color: #fff;
+    padding: 2px 10px;
+    height: auto;
+    min-width: auto;
+    font-weight: 600;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.15);
+    border-radius: 4px;
+  }
+  .card-title { font-size: 14px; line-height: 1.4; word-wrap: break-word; color: var(--text); }
+  .card-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-mute);
+  }
+  .priority-badge {
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .priority-low      { background: #dbeafe; color: #1e40af; }
+  .priority-medium   { background: #fef3c7; color: #92400e; }
+  .priority-high     { background: #fed7aa; color: #9a3412; }
+  .priority-urgent   { background: #fecaca; color: #991b1b; }
+  [data-theme="dark"] .priority-low    { background: #1e3a8a; color: #bfdbfe; }
+  [data-theme="dark"] .priority-medium { background: #78350f; color: #fde68a; }
+  [data-theme="dark"] .priority-high   { background: #7c2d12; color: #fed7aa; }
+  [data-theme="dark"] .priority-urgent { background: #7f1d1d; color: #fecaca; }
+  .due-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.05);
+  }
+  [data-theme="dark"] .due-badge { background: rgba(255,255,255,0.06); }
+  .due-badge.overdue { background: rgba(220,38,38,0.15); color: var(--danger); }
+  .due-badge.today   { background: rgba(217,119,6,0.15);  color: var(--warn); }
+  .checklist-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.05);
+  }
+  [data-theme="dark"] .checklist-meta { background: rgba(255,255,255,0.06); }
+  .checklist-meta.complete { background: rgba(5,150,105,0.18); color: var(--ok); }
+  .members-mini { display: inline-flex; gap: -3px; }
+  .avatar {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: -4px;
+    border: 1.5px solid var(--bg-card);
+  }
+  .members-mini .avatar:first-child { margin-left: 0; }
+  .attach-meta { display: inline-flex; align-items: center; gap: 3px; }
+
+  /* ---------- modal ---------- */
+  #modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 100;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px;
+    overflow-y: auto;
+  }
+  #modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg-elev);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 640px;
+    max-height: calc(100vh - 80px);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .modal.open { display: flex; }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-header h2 { margin: 0; font-size: 16px; flex: 1; }
+  .modal-body { padding: 16px 18px; overflow-y: auto; }
+  .modal-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 18px;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .modal-footer .spacer { flex: 1; }
+
+  /* ---------- card editor specific ---------- */
+  .editor-grid {
+    display: grid;
+    grid-template-columns: 1fr 180px;
+    gap: 16px;
+  }
+  @media (max-width: 600px) {
+    .editor-grid { grid-template-columns: 1fr; }
+  }
+  .editor-side .side-section { margin-bottom: 14px; }
+  .editor-side .side-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-mute); margin-bottom: 6px; font-weight: 600; }
+  .editor-side button.side-btn {
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--border);
+    margin-bottom: 4px;
+    padding: 6px 10px;
+  }
+
+  .desc-preview {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    background: var(--bg);
+    min-height: 40px;
+    cursor: text;
+    line-height: 1.5;
+  }
+  .desc-preview p { margin: 4px 0; }
+  .desc-preview h1, .desc-preview h2, .desc-preview h3 { margin: 8px 0 4px; }
+  .desc-preview code { background: rgba(0,0,0,0.07); padding: 1px 4px; border-radius: 3px; font-size: 0.9em; }
+  [data-theme="dark"] .desc-preview code { background: rgba(255,255,255,0.1); }
+  .desc-preview ul { padding-left: 20px; margin: 4px 0; }
+  .desc-preview a { color: var(--accent); }
+  .desc-preview .empty { color: var(--text-faint); font-style: italic; }
+
+  .checklist-block .check-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+  }
+  .checklist-block .check-row input[type=checkbox] { width: auto; margin: 0; }
+  .checklist-block .check-row input[type=text] { flex: 1; border: none; background: transparent; padding: 2px 4px; }
+  .checklist-block .check-row input[type=text]:focus { background: var(--bg); border: 1px solid var(--accent); }
+  .checklist-block .check-row.done input[type=text] { text-decoration: line-through; color: var(--text-mute); }
+  .check-row button { padding: 0 6px; color: var(--text-mute); }
+  .checklist-progress {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 6px 0;
+  }
+  .checklist-progress-fill { height: 100%; background: var(--ok); transition: width 0.2s; }
+
+  .label-list, .member-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .label-pill, .member-pill {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+    border: 2px solid transparent;
+    background: rgba(0,0,0,0.08);
+    color: var(--text);
+  }
+  [data-theme="dark"] .label-pill, [data-theme="dark"] .member-pill { background: rgba(255,255,255,0.08); }
+  .label-pill.selected, .member-pill.selected { border-color: var(--accent); }
+
+  .attachment-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+  .attachment-row a { color: var(--accent); text-decoration: none; flex: 1; word-break: break-all; }
+  .attachment-row .size { color: var(--text-mute); }
+
+  /* ---------- help / settings modal ---------- */
+  .help-modal kbd {
+    display: inline-block;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    margin: 0 1px;
+  }
+  .help-modal table { width: 100%; border-collapse: collapse; }
+  .help-modal td { padding: 6px 8px; vertical-align: top; }
+  .help-modal td:first-child { width: 130px; }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1d2025;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    box-shadow: var(--shadow-lg);
+    z-index: 200;
+    display: none;
+  }
+  #toast.show { display: block; animation: toast-in 0.2s; }
+  @keyframes toast-in { from { transform: translate(-50%, 8px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+  /* ---------- footer ---------- */
+  .footer-nav {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 24px;
+    background: rgba(255,255,255,0.92);
+    padding: 6px 18px;
+    border-radius: 20px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+    font-size: 0.72rem;
+    z-index: 50;
+  }
+  [data-theme="dark"] .footer-nav { background: rgba(35,38,44,0.92); box-shadow: 0 1px 6px rgba(0,0,0,0.4); }
+  .footer-nav a { color: #0366d6; text-decoration: none; }
+  [data-theme="dark"] .footer-nav a { color: var(--accent); }
+
+  /* ---------- scrollbars ---------- */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand"><span class="brand-mark">KZ</span>KanZen</div>
+  <div class="board-switcher">
+    <select id="board-select" title="Switch board"></select>
+    <button class="icon-btn" onclick="newBoardPrompt()" title="New board">+</button>
+    <button class="icon-btn" onclick="renameBoardPrompt()" title="Rename board">✎</button>
+    <button class="icon-btn btn-danger" onclick="deleteBoardConfirm()" title="Delete board">🗑</button>
+  </div>
+  <input class="header-search" id="search-input" type="text" placeholder="Search cards…">
+  <div class="save-indicator" id="save-indicator">Ready</div>
+  <button class="help-btn" onclick="openModal('help-modal')" title="Help">?</button>
+  <div class="header-actions">
+    <button class="icon-btn" id="connect-fs-btn" onclick="connectFolder()" title="Connect folder for disk save">📁</button>
+    <button class="icon-btn" onclick="openModal('settings-modal')" title="Board settings">⚙</button>
+    <button class="icon-btn" onclick="openModal('import-export-modal')" title="Import / export">⇅</button>
+    <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle theme">◐</button>
+  </div>
+</header>
+
+<div class="filter-bar">
+  <span>Filter:</span>
+  <select id="filter-label"><option value="">All labels</option></select>
+  <select id="filter-priority">
+    <option value="">All priorities</option>
+    <option value="urgent">Urgent</option>
+    <option value="high">High</option>
+    <option value="medium">Medium</option>
+    <option value="low">Low</option>
+    <option value="none">None</option>
+  </select>
+  <select id="filter-due">
+    <option value="">All due dates</option>
+    <option value="overdue">Overdue</option>
+    <option value="today">Due today</option>
+    <option value="week">Due this week</option>
+    <option value="none">No date</option>
+  </select>
+  <select id="filter-member"><option value="">All members</option></select>
+  <span class="clear-filters" onclick="clearFilters()">Clear</span>
+</div>
+
+<main class="board-area" id="board-area"></main>
+
+<!-- ===== modal overlay (must precede script) ===== -->
+<div id="modal-overlay" onclick="onOverlayClick(event)">
+
+  <!-- card editor -->
+  <div class="modal" id="card-modal">
+    <div class="modal-header">
+      <h2 id="card-modal-title">Edit card</h2>
+      <button onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="editor-grid">
+        <div>
+          <label class="field">
+            <span class="label-txt">Title</span>
+            <input id="card-title-input" type="text" placeholder="Card title">
+          </label>
+          <label class="field">
+            <span class="label-txt">Description (markdown)</span>
+            <textarea id="card-desc-input" placeholder="Add a more detailed description… (supports # heading, **bold**, *italic*, `code`, [link](url), - list)"></textarea>
+            <div class="desc-preview" id="card-desc-preview" style="margin-top:6px;"></div>
+          </label>
+          <div class="field">
+            <span class="label-txt">Checklist</span>
+            <div class="checklist-progress"><div class="checklist-progress-fill" id="check-fill"></div></div>
+            <div class="checklist-block" id="checklist-block"></div>
+            <button class="btn-ghost" onclick="addChecklistItem()" style="margin-top:6px;">+ Add item</button>
+          </div>
+          <div class="field">
+            <span class="label-txt">Attachments</span>
+            <div id="attachments-list"></div>
+            <input type="file" id="attach-input" multiple style="display:none" onchange="onAttachFiles(event)">
+            <button class="btn-ghost" onclick="document.getElementById('attach-input').click()">+ Attach files</button>
+          </div>
+        </div>
+        <div class="editor-side">
+          <div class="side-section">
+            <div class="side-label">Priority</div>
+            <select id="card-priority">
+              <option value="none">None</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div class="side-section">
+            <div class="side-label">Due date</div>
+            <input id="card-due" type="date">
+          </div>
+          <div class="side-section">
+            <div class="side-label">Labels</div>
+            <div class="label-list" id="card-labels-list"></div>
+            <button class="btn-ghost" style="width:100%;font-size:12px;" onclick="newLabelPrompt()">+ New label</button>
+          </div>
+          <div class="side-section">
+            <div class="side-label">Members</div>
+            <div class="member-list" id="card-members-list"></div>
+            <button class="btn-ghost" style="width:100%;font-size:12px;" onclick="newMemberPrompt()">+ New member</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-danger" onclick="deleteCardConfirm()">Delete card</button>
+      <div class="spacer"></div>
+      <button onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveCardModal()">Save</button>
+    </div>
+  </div>
+
+  <!-- settings -->
+  <div class="modal" id="settings-modal">
+    <div class="modal-header">
+      <h2>Board settings</h2>
+      <button onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span class="label-txt">Board name</span>
+        <input id="settings-board-name" type="text">
+      </label>
+      <div class="field">
+        <span class="label-txt">Columns &amp; WIP limits</span>
+        <div id="settings-columns-list"></div>
+        <button class="btn-ghost" style="margin-top:8px;" onclick="addColumnFromSettings()">+ Add column</button>
+      </div>
+      <div class="field">
+        <span class="label-txt">Members</span>
+        <div id="settings-members-list"></div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <input id="settings-new-member" type="text" placeholder="New member name">
+          <button class="btn-ghost" onclick="addMemberFromSettings()">Add</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label-txt">Labels</span>
+        <div id="settings-labels-list"></div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <input id="settings-new-label" type="text" placeholder="New label name">
+          <button class="btn-ghost" onclick="addLabelFromSettings()">Add</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="spacer"></div>
+      <button class="btn-primary" onclick="saveSettingsModal()">Save</button>
+    </div>
+  </div>
+
+  <!-- import / export -->
+  <div class="modal" id="import-export-modal">
+    <div class="modal-header">
+      <h2>Import / export</h2>
+      <button onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <span class="label-txt">Export</span>
+        <button class="btn-ghost" onclick="exportCurrentBoard()">⤓ Export current board (.kanzen.json)</button>
+        <button class="btn-ghost" style="margin-top:6px;" onclick="exportAllBoards()">⤓ Export all boards (.json)</button>
+      </div>
+      <div class="field">
+        <span class="label-txt">Import</span>
+        <input type="file" id="import-file" accept=".json,.kanzen.json" onchange="onImportFile(event)">
+        <div style="margin-top:6px;">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;">
+            <input type="radio" name="import-mode" value="merge" checked style="width:auto;"> Merge (keep existing)
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;margin-left:14px;">
+            <input type="radio" name="import-mode" value="replace" style="width:auto;"> Replace all
+          </label>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label-txt">Storage</span>
+        <div id="storage-status" style="font-size:12px;color:var(--text-mute);"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="spacer"></div>
+      <button onclick="closeModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- help -->
+  <div class="modal help-modal" id="help-modal">
+    <div class="modal-header">
+      <h2>KanZen — Quick start</h2>
+      <button onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p><strong>Kanban without the noise.</strong> Single file, your folder, your data. No server, no account, no board limits.</p>
+      <h3 style="margin:14px 0 6px;font-size:13px;">Storage</h3>
+      <p style="font-size:12px;color:var(--text-mute);">Click <strong>📁</strong> to connect a folder. KanZen will write each board as a plain <code>.kanzen.json</code> file you can read, back up, sync with Dropbox/iCloud/git, or open in any text editor. If you don't connect a folder, boards live in this browser's IndexedDB and you can still export them as JSON.</p>
+      <h3 style="margin:14px 0 6px;font-size:13px;">Keyboard shortcuts</h3>
+      <table>
+        <tr><td><kbd>N</kbd></td><td>New card in the focused column (or first column)</td></tr>
+        <tr><td><kbd>E</kbd> / <kbd>Enter</kbd></td><td>Edit focused card</td></tr>
+        <tr><td><kbd>/</kbd></td><td>Focus search</td></tr>
+        <tr><td><kbd>← → ↑ ↓</kbd></td><td>Move card focus</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Close modals</td></tr>
+      </table>
+      <h3 style="margin:14px 0 6px;font-size:13px;">Tips</h3>
+      <ul style="font-size:12px;color:var(--text-mute);padding-left:18px;">
+        <li>Drag cards between columns and reorder within a column.</li>
+        <li>Drag column headers to reorder columns.</li>
+        <li>Filter cards by label / priority / due / member — non-matching cards <em>dim</em> instead of hiding, so you keep the board's shape.</li>
+        <li>Auto-save runs every 5 seconds when you make changes; destructive actions save immediately.</li>
+        <li>Browser-stored boards are exportable to JSON anytime.</li>
+      </ul>
+    </div>
+    <div class="modal-footer">
+      <div class="spacer"></div>
+      <button class="btn-primary" onclick="closeModal()">Got it</button>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<div class="footer-nav">
+  <a href="https://naklitechie.github.io/">⬅ More Projects</a>
+  <a href="https://github.com/NakliTechie/KanZen">⌨ Source</a>
+</div>
+
+<script>
+/* ============================================================
+   KanZen v1
+   Single-file local-first kanban
+   ============================================================ */
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+function uid(){ return Math.random().toString(36).slice(2,10).padEnd(8,'0'); }
+function now(){ return Date.now(); }
+function escapeHtml(s){
+  return String(s ?? '')
+    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+    .replaceAll('"','&quot;').replaceAll("'",'&#39;');
+}
+function debounce(fn, ms){
+  let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); };
+}
+function toast(msg){
+  const el = $('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(()=>el.classList.remove('show'), 2200);
+}
+function slugify(s){
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40) || 'board';
+}
+
+/* tiny markdown — headings, bold, italic, inline code, links, bullet lists, line breaks */
+function mdToHtml(src){
+  if(!src) return '<div class="empty">No description</div>';
+  const lines = String(src).split(/\r?\n/);
+  const out = [];
+  let inList = false;
+  const inline = s => escapeHtml(s)
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g,'<em>$1</em>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,t,u)=>`<a href="${escapeHtml(u)}" target="_blank" rel="noopener">${t}</a>`);
+  for(const raw of lines){
+    const line = raw.replace(/\s+$/,'');
+    if(/^\s*-\s+/.test(line)){
+      if(!inList){ out.push('<ul>'); inList = true; }
+      out.push('<li>' + inline(line.replace(/^\s*-\s+/,'')) + '</li>');
+      continue;
+    }
+    if(inList){ out.push('</ul>'); inList = false; }
+    if(/^###\s+/.test(line))      out.push('<h3>' + inline(line.replace(/^###\s+/,'')) + '</h3>');
+    else if(/^##\s+/.test(line))  out.push('<h2>' + inline(line.replace(/^##\s+/,'')) + '</h2>');
+    else if(/^#\s+/.test(line))   out.push('<h1>' + inline(line.replace(/^#\s+/,'')) + '</h1>');
+    else if(line.trim() === '')   out.push('');
+    else                          out.push('<p>' + inline(line) + '</p>');
+  }
+  if(inList) out.push('</ul>');
+  return out.join('\n');
+}
+
+const LABEL_COLORS = ['#61bd4f','#f2d600','#ff9f1a','#eb5a46','#c377e0','#0079bf','#00c2e0','#51e898','#ff78cb','#344563'];
+
+/* ---------- state ---------- */
+const S = window.S = {
+  boards: {},          // id -> board object
+  boardOrder: [],      // [boardId,...] for the dropdown
+  currentBoardId: null,
+  settings: { theme:'light', lastBoardId:null, version:1 },
+  dirty: false,
+  storageMode: 'idb',  // 'fs' | 'idb'
+  dirHandle: null,
+  filter: { search:'', labelId:'', priority:'', due:'', memberId:'' },
+  focusedCardId: null,
+  editingCardId: null,
+  editingColumnId: null,
+};
+
+/* ============================================================
+   Storage layer — façade over StorageFS / StorageIDB
+   ============================================================ */
+
+const IDB_NAME = 'kanzen', IDB_VERSION = 1;
+let _idb = null;
+function openIDB(){
+  if(_idb) return Promise.resolve(_idb);
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains('boards'))   db.createObjectStore('boards',   { keyPath:'id' });
+      if(!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath:'key' });
+    };
+    req.onsuccess = () => { _idb = req.result; resolve(_idb); };
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbAll(store){
+  const db = await openIDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store,'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(store, value){
+  const db = await openIDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store,'readwrite');
+    tx.objectStore(store).put(value);
+    tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbDel(store, key){
+  const db = await openIDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store,'readwrite');
+    tx.objectStore(store).delete(key);
+    tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGet(store, key){
+  const db = await openIDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store,'readonly');
+    const req = tx.objectStore(store).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/* IDB helpers store boards as { id, slug, data:<board json> } */
+const StorageIDB = {
+  async loadAll(){
+    const rows = await idbAll('boards');
+    const boards = {};
+    for(const r of rows){ boards[r.id] = r.data; }
+    const sRow = await idbGet('settings','main');
+    const settings = sRow?.value || null;
+    return { boards, settings };
+  },
+  async saveBoard(board){
+    await idbPut('boards', { id: board.id, slug: slugify(board.name), data: board });
+  },
+  async deleteBoard(board){
+    await idbDel('boards', board.id);
+  },
+  async saveSettings(settings){
+    await idbPut('settings', { key:'main', value: settings });
+  }
+};
+
+const StorageFS = {
+  dirHandle: null,
+  async ensureBoardsDir(){
+    return await this.dirHandle.getDirectoryHandle('boards', { create:true });
+  },
+  fileNameFor(board){
+    return slugify(board.name) + '-' + board.id.slice(0,4) + '.kanzen.json';
+  },
+  async loadAll(){
+    const boards = {};
+    let settings = null;
+    try{
+      const boardsDir = await this.ensureBoardsDir();
+      for await (const [name, entry] of boardsDir.entries()){
+        if(entry.kind !== 'file') continue;
+        if(!name.endsWith('.kanzen.json')) continue;
+        try{
+          const file = await entry.getFile();
+          const text = await file.text();
+          const json = JSON.parse(text);
+          if(json && json.id) boards[json.id] = json;
+        }catch(e){ console.warn('Failed to load', name, e); }
+      }
+    }catch(e){ console.warn('FS loadAll boards failed', e); }
+    try{
+      const fh = await this.dirHandle.getFileHandle('kanzen-settings.json');
+      const text = await (await fh.getFile()).text();
+      settings = JSON.parse(text);
+    }catch(_){ /* missing is fine */ }
+    return { boards, settings };
+  },
+  async saveBoard(board){
+    const boardsDir = await this.ensureBoardsDir();
+    const fh = await boardsDir.getFileHandle(this.fileNameFor(board), { create:true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(board, null, 2));
+    await w.close();
+  },
+  async deleteBoard(board){
+    const boardsDir = await this.ensureBoardsDir();
+    try{ await boardsDir.removeEntry(this.fileNameFor(board)); }catch(_){ }
+  },
+  async saveSettings(settings){
+    const fh = await this.dirHandle.getFileHandle('kanzen-settings.json', { create:true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(settings, null, 2));
+    await w.close();
+  }
+};
+
+const storage = {
+  async loadAll(){ return S.storageMode === 'fs' ? StorageFS.loadAll() : StorageIDB.loadAll(); },
+  async saveBoard(b){
+    // always mirror to IDB cache so the user has an offline fallback even after disconnecting the folder
+    await StorageIDB.saveBoard(b);
+    if(S.storageMode === 'fs'){ try{ await StorageFS.saveBoard(b); }catch(e){ console.error(e); throw e; } }
+  },
+  async deleteBoard(b){
+    await StorageIDB.deleteBoard(b);
+    if(S.storageMode === 'fs'){ try{ await StorageFS.deleteBoard(b); }catch(e){ console.error(e); } }
+  },
+  async saveSettings(s){
+    await StorageIDB.saveSettings(s);
+    if(S.storageMode === 'fs'){ try{ await StorageFS.saveSettings(s); }catch(e){ console.error(e); } }
+  }
+};
+
+async function connectFolder(){
+  if(!('showDirectoryPicker' in window)){
+    toast('File System Access API not supported in this browser');
+    return;
+  }
+  try{
+    const handle = await window.showDirectoryPicker({ mode:'readwrite' });
+    StorageFS.dirHandle = handle;
+    S.dirHandle = handle;
+    S.storageMode = 'fs';
+    // load any existing boards from disk; merge with what's in memory
+    const { boards, settings } = await StorageFS.loadAll();
+    for(const id of Object.keys(boards)) S.boards[id] = boards[id];
+    if(settings) S.settings = { ...S.settings, ...settings };
+    rebuildBoardOrder();
+    // write all current in-memory boards to disk so the folder becomes a complete mirror
+    for(const id of S.boardOrder){ try{ await StorageFS.saveBoard(S.boards[id]); }catch(e){ console.error(e); } }
+    await StorageFS.saveSettings(S.settings);
+    setSaveIndicator('saved');
+    toast('Folder connected — boards saved to disk');
+    refreshStorageStatus();
+    renderAll();
+  }catch(e){
+    if(e?.name === 'AbortError') return;
+    console.error(e); toast('Could not connect folder');
+  }
+}
+
+function refreshStorageStatus(){
+  const el = $('storage-status');
+  if(!el) return;
+  if(S.storageMode === 'fs'){
+    el.innerHTML = '✓ Connected to local folder. Boards are saved to <code>boards/*.kanzen.json</code> on disk.';
+  } else {
+    el.innerHTML = 'Boards are stored in this browser\'s IndexedDB. Click <strong>📁</strong> in the header to save them as files in a folder you pick.';
+  }
+}
+
+/* ============================================================
+   Board / column / card model helpers
+   ============================================================ */
+
+function newBoard(name){
+  const id = uid();
+  const t = now();
+  return {
+    _meta: { boardId:id, lastModified:t, kanzenVersion:1 },
+    id, name, createdAt:t,
+    members: [],
+    labels: [
+      { id:uid(), name:'Idea',     color:LABEL_COLORS[0] },
+      { id:uid(), name:'Bug',      color:LABEL_COLORS[3] },
+      { id:uid(), name:'Research', color:LABEL_COLORS[5] }
+    ],
+    columns: [
+      { id:uid(), name:'To Do',       wipLimit:0, collapsed:false, cardIds:[] },
+      { id:uid(), name:'In Progress', wipLimit:0, collapsed:false, cardIds:[] },
+      { id:uid(), name:'Done',        wipLimit:0, collapsed:false, cardIds:[] },
+    ],
+    cards: {}
+  };
+}
+function newCard(title){
+  const id = uid(); const t = now();
+  return {
+    id, title, description:'',
+    labelIds:[], memberIds:[],
+    priority:'none', dueDate:null,
+    checklist:[], attachments:[],
+    createdAt:t, updatedAt:t
+  };
+}
+function currentBoard(){ return S.currentBoardId ? S.boards[S.currentBoardId] : null; }
+function rebuildBoardOrder(){
+  S.boardOrder = Object.keys(S.boards).sort((a,b)=>(S.boards[a].name||'').localeCompare(S.boards[b].name||''));
+}
+function findColumnByCard(board, cardId){
+  return board.columns.find(c => c.cardIds.includes(cardId));
+}
+function markDirty(){ S.dirty = true; setSaveIndicator('dirty'); }
+
+/* ============================================================
+   Persistence orchestration
+   ============================================================ */
+
+async function flushSave(){
+  const b = currentBoard();
+  if(!b){ S.dirty = false; return; }
+  setSaveIndicator('saving');
+  b._meta.lastModified = now();
+  try{
+    await storage.saveBoard(b);
+    S.dirty = false;
+    setSaveIndicator('saved');
+  }catch(e){
+    console.error(e);
+    setSaveIndicator('error');
+  }
+}
+const debouncedSave = debounce(flushSave, 5000);
+function scheduleSave(){
+  markDirty();
+  debouncedSave();
+}
+async function flushAllBoards(){
+  for(const id of S.boardOrder){
+    try{ await storage.saveBoard(S.boards[id]); }catch(e){ console.error(e); }
+  }
+}
+
+function setSaveIndicator(state){
+  const el = $('save-indicator');
+  el.classList.remove('saving','saved','dirty','error');
+  if(state === 'saving'){ el.textContent = 'Saving…'; el.classList.add('saving'); }
+  else if(state === 'saved'){ el.textContent = 'Saved ✓'; el.classList.add('saved'); }
+  else if(state === 'dirty'){ el.textContent = 'Unsaved changes'; el.classList.add('dirty'); }
+  else if(state === 'error'){ el.textContent = 'Save error'; el.classList.add('error'); }
+  else el.textContent = 'Ready';
+}
+
+/* ============================================================
+   Render
+   ============================================================ */
+
+function renderAll(){
+  renderBoardSwitcher();
+  renderFilters();
+  renderBoard();
+}
+
+function renderBoardSwitcher(){
+  const sel = $('board-select');
+  sel.innerHTML = '';
+  if(!S.boardOrder.length){
+    const opt = document.createElement('option'); opt.value=''; opt.textContent='(no boards)';
+    sel.appendChild(opt); return;
+  }
+  for(const id of S.boardOrder){
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = S.boards[id].name || '(untitled)';
+    if(id === S.currentBoardId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function renderFilters(){
+  const b = currentBoard();
+  const labelSel = $('filter-label'), memberSel = $('filter-member');
+  labelSel.innerHTML = '<option value="">All labels</option>';
+  memberSel.innerHTML = '<option value="">All members</option>';
+  if(!b) return;
+  for(const l of b.labels){
+    const o = document.createElement('option'); o.value=l.id; o.textContent=l.name; if(S.filter.labelId===l.id) o.selected=true;
+    labelSel.appendChild(o);
+  }
+  for(const m of b.members){
+    const o = document.createElement('option'); o.value=m.id; o.textContent=m.name; if(S.filter.memberId===m.id) o.selected=true;
+    memberSel.appendChild(o);
+  }
+  $('filter-priority').value = S.filter.priority || '';
+  $('filter-due').value = S.filter.due || '';
+  $('search-input').value = S.filter.search || '';
+}
+
+function cardMatchesFilter(card, board){
+  const f = S.filter;
+  if(f.search){
+    const q = f.search.toLowerCase();
+    if(!(card.title||'').toLowerCase().includes(q) && !(card.description||'').toLowerCase().includes(q)) return false;
+  }
+  if(f.labelId && !card.labelIds.includes(f.labelId)) return false;
+  if(f.memberId && !card.memberIds.includes(f.memberId)) return false;
+  if(f.priority && card.priority !== f.priority) return false;
+  if(f.due){
+    const d = card.dueDate;
+    if(f.due === 'none'){ if(d) return false; }
+    else {
+      if(!d) return false;
+      const today = new Date(); today.setHours(0,0,0,0);
+      const due = new Date(d + 'T00:00:00');
+      const diffDays = Math.round((due - today) / 86400000);
+      if(f.due === 'overdue' && diffDays >= 0) return false;
+      if(f.due === 'today'   && diffDays !== 0) return false;
+      if(f.due === 'week'    && (diffDays < 0 || diffDays > 7)) return false;
+    }
+  }
+  return true;
+}
+
+function isFilterActive(){
+  const f = S.filter;
+  return !!(f.search || f.labelId || f.memberId || f.priority || f.due);
+}
+
+function renderBoard(){
+  const area = $('board-area');
+  area.innerHTML = '';
+  const b = currentBoard();
+  if(!b){
+    const div = document.createElement('div');
+    div.className = 'empty-state';
+    div.innerHTML = '<h2>No board yet</h2><p>Create a board to get started.</p><button class="btn-primary" onclick="newBoardPrompt()">+ New board</button>';
+    area.appendChild(div);
+    return;
+  }
+  const filterActive = isFilterActive();
+  for(const col of b.columns){
+    const colEl = document.createElement('section');
+    colEl.className = 'column' + (col.collapsed ? ' collapsed' : '');
+    colEl.dataset.columnId = col.id;
+    colEl.draggable = true;
+    colEl.addEventListener('dragstart', e => onColDragStart(e, col.id));
+    colEl.addEventListener('dragover',  e => onColDragOver(e, col.id));
+    colEl.addEventListener('dragleave', e => colEl.classList.remove('drag-over'));
+    colEl.addEventListener('drop',      e => onColDrop(e, col.id));
+
+    const matched = filterActive ? col.cardIds.filter(cid => b.cards[cid] && cardMatchesFilter(b.cards[cid], b)).length : col.cardIds.length;
+    const total = col.cardIds.length;
+    const overWip = col.wipLimit > 0 && total > col.wipLimit;
+    colEl.innerHTML = `
+      <div class="col-header">
+        <input class="col-name" value="${escapeHtml(col.name)}" onchange="renameColumn('${col.id}', this.value)" onclick="event.stopPropagation()">
+        <span class="col-count ${overWip?'over-wip':''}" title="${overWip?'Over WIP limit ('+col.wipLimit+')':''}">
+          ${filterActive ? matched + '/' : ''}${total}${col.wipLimit>0 ? ' / '+col.wipLimit : ''}
+        </span>
+        <div class="col-actions">
+          <button onclick="toggleColumnCollapse('${col.id}')" title="Collapse">${col.collapsed?'▸':'▾'}</button>
+          <button onclick="deleteColumnConfirm('${col.id}')" title="Delete column">🗑</button>
+        </div>
+      </div>
+      <div class="col-body" id="col-body-${col.id}"></div>
+      <div class="col-footer">
+        <button class="add-card-btn" onclick="addCardPrompt('${col.id}')">+ Add card</button>
+      </div>
+    `;
+    area.appendChild(colEl);
+
+    const body = colEl.querySelector('.col-body');
+    body.addEventListener('dragover', e => { e.preventDefault(); colEl.classList.add('drag-over'); });
+    body.addEventListener('drop',     e => onColDrop(e, col.id));
+
+    for(const cardId of col.cardIds){
+      const card = b.cards[cardId];
+      if(!card) continue;
+      const matches = !filterActive || cardMatchesFilter(card, b);
+      body.appendChild(renderCard(card, b, matches));
+    }
+  }
+
+  // add-column tile
+  const addColEl = document.createElement('section');
+  addColEl.className = 'column add-col-tile';
+  addColEl.innerHTML = '<button class="add-card-btn" style="margin:8px;" onclick="addColumnPrompt()">+ Add another list</button>';
+  area.appendChild(addColEl);
+}
+
+function renderCard(card, board, matches){
+  const el = document.createElement('div');
+  el.className = 'card' + (matches ? '' : ' dim') + (S.focusedCardId === card.id ? ' focused' : '');
+  el.dataset.cardId = card.id;
+  el.tabIndex = 0;
+  el.draggable = true;
+  el.addEventListener('click', () => openCardEditor(card.id));
+  el.addEventListener('focus', () => { S.focusedCardId = card.id; });
+  el.addEventListener('dragstart', e => onCardDragStart(e, card.id));
+  el.addEventListener('dragend',   e => el.classList.remove('dragging'));
+
+  // labels
+  let labelsHtml = '';
+  if(card.labelIds.length){
+    labelsHtml = '<div class="card-labels">' + card.labelIds.map(id => {
+      const l = board.labels.find(x => x.id === id);
+      if(!l) return '';
+      return `<span class="label-chip named" style="background:${l.color}">${escapeHtml(l.name)}</span>`;
+    }).join('') + '</div>';
+  }
+
+  // meta row
+  const metaParts = [];
+  if(card.priority && card.priority !== 'none'){
+    metaParts.push(`<span class="priority-badge priority-${card.priority}">${card.priority}</span>`);
+  }
+  if(card.dueDate){
+    const today = new Date(); today.setHours(0,0,0,0);
+    const due = new Date(card.dueDate + 'T00:00:00');
+    const diff = Math.round((due - today) / 86400000);
+    let cls = '';
+    if(diff < 0) cls = ' overdue';
+    else if(diff === 0) cls = ' today';
+    metaParts.push(`<span class="due-badge${cls}">📅 ${escapeHtml(card.dueDate)}</span>`);
+  }
+  if(card.checklist.length){
+    const done = card.checklist.filter(i => i.done).length;
+    const cls = done === card.checklist.length ? ' complete' : '';
+    metaParts.push(`<span class="checklist-meta${cls}">☑ ${done}/${card.checklist.length}</span>`);
+  }
+  if(card.attachments.length){
+    metaParts.push(`<span class="attach-meta">📎 ${card.attachments.length}</span>`);
+  }
+  if(card.memberIds.length){
+    const avs = card.memberIds.map(mid => {
+      const m = board.members.find(x => x.id === mid);
+      if(!m) return '';
+      const initials = (m.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+      return `<span class="avatar" title="${escapeHtml(m.name)}" style="background:${m.color||'var(--accent)'}">${escapeHtml(initials)}</span>`;
+    }).join('');
+    metaParts.push(`<span class="members-mini">${avs}</span>`);
+  }
+  const metaHtml = metaParts.length ? `<div class="card-meta">${metaParts.join('')}</div>` : '';
+
+  el.innerHTML = labelsHtml + `<div class="card-title">${escapeHtml(card.title)}</div>` + metaHtml;
+  return el;
+}
+
+/* ============================================================
+   Drag & drop
+   ============================================================ */
+
+let _drag = null;  // { kind:'card'|'column', id }
+
+function onCardDragStart(e, cardId){
+  _drag = { kind:'card', id:cardId };
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', cardId);
+  e.target.classList.add('dragging');
+}
+function onColDragStart(e, colId){
+  // only fire when the column header (the draggable host) initiates the drag, not a card child
+  if(e.target.closest('.card')) return;
+  _drag = { kind:'column', id:colId };
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onColDragOver(e, colId){
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+function onColDrop(e, colId){
+  e.preventDefault();
+  e.stopPropagation();
+  e.currentTarget.classList.remove('drag-over');
+  const b = currentBoard(); if(!b) return;
+  if(!_drag) return;
+
+  if(_drag.kind === 'card'){
+    const cardId = _drag.id;
+    const fromCol = findColumnByCard(b, cardId);
+    if(!fromCol) return;
+    fromCol.cardIds = fromCol.cardIds.filter(x => x !== cardId);
+    const toCol = b.columns.find(c => c.id === colId);
+    if(!toCol) return;
+
+    // compute insertion index by pointer Y vs existing cards in target body
+    const body = document.getElementById('col-body-' + colId);
+    let insertIdx = toCol.cardIds.length;
+    if(body){
+      const cards = [...body.querySelectorAll('.card')];
+      for(let i = 0; i < cards.length; i++){
+        const r = cards[i].getBoundingClientRect();
+        if(e.clientY < r.top + r.height/2){ insertIdx = i; break; }
+      }
+    }
+    toCol.cardIds.splice(insertIdx, 0, cardId);
+  } else if(_drag.kind === 'column'){
+    if(_drag.id === colId){ _drag = null; return; }
+    const fromIdx = b.columns.findIndex(c => c.id === _drag.id);
+    const toIdx   = b.columns.findIndex(c => c.id === colId);
+    if(fromIdx < 0 || toIdx < 0) return;
+    const [moved] = b.columns.splice(fromIdx, 1);
+    b.columns.splice(toIdx, 0, moved);
+  }
+  _drag = null;
+  scheduleSave();
+  renderBoard();
+}
+
+/* ============================================================
+   Board CRUD
+   ============================================================ */
+
+function newBoardPrompt(){
+  const name = prompt('New board name:', 'Untitled board');
+  if(!name) return;
+  const b = newBoard(name);
+  S.boards[b.id] = b;
+  rebuildBoardOrder();
+  S.currentBoardId = b.id;
+  S.settings.lastBoardId = b.id;
+  storage.saveSettings(S.settings);
+  scheduleSave();
+  renderAll();
+}
+function renameBoardPrompt(){
+  const b = currentBoard(); if(!b) return;
+  const name = prompt('Board name:', b.name);
+  if(!name) return;
+  b.name = name;
+  rebuildBoardOrder();
+  scheduleSave();
+  renderAll();
+}
+async function deleteBoardConfirm(){
+  const b = currentBoard(); if(!b) return;
+  if(!confirm(`Delete board "${b.name}"? This cannot be undone.`)) return;
+  await storage.deleteBoard(b);
+  delete S.boards[b.id];
+  rebuildBoardOrder();
+  S.currentBoardId = S.boardOrder[0] || null;
+  S.settings.lastBoardId = S.currentBoardId;
+  storage.saveSettings(S.settings);
+  renderAll();
+  toast('Board deleted');
+}
+function switchBoard(id){
+  if(!S.boards[id]) return;
+  S.currentBoardId = id;
+  S.settings.lastBoardId = id;
+  storage.saveSettings(S.settings);
+  S.focusedCardId = null;
+  renderAll();
+}
+
+/* ============================================================
+   Column CRUD
+   ============================================================ */
+
+function addColumnPrompt(){
+  const b = currentBoard(); if(!b) return;
+  const name = prompt('Column name:', 'New column');
+  if(!name) return;
+  b.columns.push({ id:uid(), name, wipLimit:0, collapsed:false, cardIds:[] });
+  scheduleSave();
+  renderBoard();
+}
+function renameColumn(colId, newName){
+  const b = currentBoard(); if(!b) return;
+  const c = b.columns.find(x => x.id === colId); if(!c) return;
+  c.name = newName;
+  scheduleSave();
+}
+function toggleColumnCollapse(colId){
+  const b = currentBoard(); if(!b) return;
+  const c = b.columns.find(x => x.id === colId); if(!c) return;
+  c.collapsed = !c.collapsed;
+  scheduleSave();
+  renderBoard();
+}
+async function deleteColumnConfirm(colId){
+  const b = currentBoard(); if(!b) return;
+  const c = b.columns.find(x => x.id === colId); if(!c) return;
+  if(c.cardIds.length && !confirm(`Delete column "${c.name}" and its ${c.cardIds.length} card(s)?`)) return;
+  if(!c.cardIds.length && !confirm(`Delete column "${c.name}"?`)) return;
+  for(const cid of c.cardIds) delete b.cards[cid];
+  b.columns = b.columns.filter(x => x.id !== colId);
+  await flushSave();
+  renderBoard();
+}
+
+/* ============================================================
+   Card CRUD
+   ============================================================ */
+
+function addCardPrompt(colId){
+  const b = currentBoard(); if(!b) return;
+  const title = prompt('Card title:');
+  if(!title) return;
+  const card = newCard(title);
+  b.cards[card.id] = card;
+  const c = b.columns.find(x => x.id === colId); if(!c) return;
+  c.cardIds.push(card.id);
+  scheduleSave();
+  renderBoard();
+}
+async function deleteCardConfirm(){
+  const b = currentBoard(); if(!b || !S.editingCardId) return;
+  const card = b.cards[S.editingCardId]; if(!card) return;
+  if(!confirm(`Delete card "${card.title}"?`)) return;
+  const col = findColumnByCard(b, card.id);
+  if(col) col.cardIds = col.cardIds.filter(x => x !== card.id);
+  delete b.cards[card.id];
+  closeModal();
+  await flushSave();
+  renderBoard();
+}
+
+/* ============================================================
+   Card editor modal
+   ============================================================ */
+
+function openCardEditor(cardId){
+  const b = currentBoard(); if(!b) return;
+  const card = b.cards[cardId]; if(!card) return;
+  S.editingCardId = cardId;
+  $('card-modal-title').textContent = 'Edit card';
+  $('card-title-input').value = card.title || '';
+  $('card-desc-input').value  = card.description || '';
+  $('card-priority').value    = card.priority || 'none';
+  $('card-due').value         = card.dueDate || '';
+  renderDescPreview();
+  renderEditorChecklist();
+  renderEditorLabels();
+  renderEditorMembers();
+  renderEditorAttachments();
+  openModal('card-modal');
+  setTimeout(() => $('card-title-input').focus(), 50);
+}
+function renderDescPreview(){
+  const v = $('card-desc-input').value;
+  $('card-desc-preview').innerHTML = mdToHtml(v);
+}
+function renderEditorChecklist(){
+  const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  const el = $('checklist-block'); el.innerHTML = '';
+  for(const item of card.checklist){
+    const row = document.createElement('div');
+    row.className = 'check-row' + (item.done ? ' done' : '');
+    row.innerHTML = `
+      <input type="checkbox" ${item.done?'checked':''}>
+      <input type="text" value="${escapeHtml(item.text)}">
+      <button title="Remove">✕</button>
+    `;
+    const [cb, txt, rm] = row.children;
+    cb.onchange  = () => { item.done = cb.checked; row.classList.toggle('done', cb.checked); updateChecklistProgress(); };
+    txt.onchange = () => { item.text = txt.value; };
+    rm.onclick   = () => { card.checklist = card.checklist.filter(x => x.id !== item.id); renderEditorChecklist(); };
+    el.appendChild(row);
+  }
+  updateChecklistProgress();
+}
+function updateChecklistProgress(){
+  const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  const total = card.checklist.length;
+  const done = card.checklist.filter(i => i.done).length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  $('check-fill').style.width = pct + '%';
+}
+function addChecklistItem(){
+  const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  card.checklist.push({ id:uid(), text:'New item', done:false });
+  renderEditorChecklist();
+}
+function renderEditorLabels(){
+  const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  const el = $('card-labels-list'); el.innerHTML = '';
+  for(const l of b.labels){
+    const pill = document.createElement('span');
+    pill.className = 'label-pill' + (card.labelIds.includes(l.id) ? ' selected' : '');
+    pill.style.background = l.color;
+    pill.style.color = '#000';
+    pill.textContent = l.name;
+    pill.onclick = () => {
+      if(card.labelIds.includes(l.id)) card.labelIds = card.labelIds.filter(x => x !== l.id);
+      else card.labelIds.push(l.id);
+      renderEditorLabels();
+    };
+    el.appendChild(pill);
+  }
+}
+function newLabelPrompt(){
+  const b = currentBoard(); if(!b) return;
+  const name = prompt('Label name:'); if(!name) return;
+  const color = LABEL_COLORS[b.labels.length % LABEL_COLORS.length];
+  b.labels.push({ id:uid(), name, color });
+  renderEditorLabels();
+  scheduleSave();
+}
+function renderEditorMembers(){
+  const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  const el = $('card-members-list'); el.innerHTML = '';
+  if(!b.members.length){ el.innerHTML = '<span style="font-size:11px;color:var(--text-faint);">No members yet</span>'; return; }
+  for(const m of b.members){
+    const pill = document.createElement('span');
+    pill.className = 'member-pill' + (card.memberIds.includes(m.id) ? ' selected' : '');
+    if(m.color) pill.style.background = m.color;
+    pill.textContent = m.name;
+    pill.onclick = () => {
+      if(card.memberIds.includes(m.id)) card.memberIds = card.memberIds.filter(x => x !== m.id);
+      else card.memberIds.push(m.id);
+      renderEditorMembers();
+    };
+    el.appendChild(pill);
+  }
+}
+function newMemberPrompt(){
+  const b = currentBoard(); if(!b) return;
+  const name = prompt('Member name:'); if(!name) return;
+  b.members.push({ id:uid(), name, color:LABEL_COLORS[b.members.length % LABEL_COLORS.length] });
+  renderEditorMembers();
+  scheduleSave();
+}
+function renderEditorAttachments(){
+  const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  const el = $('attachments-list'); el.innerHTML = '';
+  for(const a of card.attachments){
+    const row = document.createElement('div');
+    row.className = 'attachment-row';
+    row.innerHTML = `<a href="${a.dataUrl}" download="${escapeHtml(a.name)}" target="_blank">${escapeHtml(a.name)}</a><span class="size">${formatBytes(a.size)}</span><button title="Remove">✕</button>`;
+    row.querySelector('button').onclick = () => {
+      card.attachments = card.attachments.filter(x => x.id !== a.id);
+      renderEditorAttachments();
+    };
+    el.appendChild(row);
+  }
+}
+function formatBytes(n){
+  if(n < 1024) return n + ' B';
+  if(n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/1024/1024).toFixed(1) + ' MB';
+}
+async function onAttachFiles(e){
+  const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  const files = [...e.target.files];
+  for(const f of files){
+    if(f.size > 5*1024*1024){
+      if(!confirm(`"${f.name}" is ${formatBytes(f.size)} — embed it anyway? (Larger files bloat the board JSON.)`)) continue;
+    }
+    const dataUrl = await new Promise((res,rej)=>{
+      const r = new FileReader(); r.onload = ()=>res(r.result); r.onerror = rej; r.readAsDataURL(f);
+    });
+    card.attachments.push({ id:uid(), name:f.name, type:f.type, size:f.size, dataUrl });
+  }
+  e.target.value = '';
+  renderEditorAttachments();
+}
+function saveCardModal(){
+  const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
+  card.title       = $('card-title-input').value.trim() || 'Untitled';
+  card.description = $('card-desc-input').value;
+  card.priority    = $('card-priority').value;
+  card.dueDate     = $('card-due').value || null;
+  card.updatedAt   = now();
+  closeModal();
+  scheduleSave();
+  renderBoard();
+}
+
+/* ============================================================
+   Settings modal
+   ============================================================ */
+
+function openSettingsModal(){
+  const b = currentBoard(); if(!b) return;
+  $('settings-board-name').value = b.name;
+  // columns
+  const cl = $('settings-columns-list'); cl.innerHTML = '';
+  for(const c of b.columns){
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px;';
+    row.innerHTML = `
+      <input type="text" value="${escapeHtml(c.name)}" style="flex:1;">
+      <input type="number" value="${c.wipLimit||0}" min="0" placeholder="WIP" style="width:80px;" title="WIP limit (0 = none)">
+      <button title="Remove">✕</button>
+    `;
+    const [nameI, wipI, rm] = row.children;
+    nameI.dataset.colId = c.id;
+    wipI.dataset.colId  = c.id;
+    rm.onclick = () => {
+      if(c.cardIds.length && !confirm(`Column "${c.name}" has ${c.cardIds.length} card(s). Delete?`)) return;
+      for(const cid of c.cardIds) delete b.cards[cid];
+      b.columns = b.columns.filter(x => x.id !== c.id);
+      openSettingsModal();
+    };
+    cl.appendChild(row);
+  }
+  // members
+  const ml = $('settings-members-list'); ml.innerHTML = '';
+  for(const m of b.members){
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px;';
+    row.innerHTML = `<input type="text" value="${escapeHtml(m.name)}" style="flex:1;"><button>✕</button>`;
+    row.children[0].dataset.memberId = m.id;
+    row.children[1].onclick = () => { b.members = b.members.filter(x => x.id !== m.id); openSettingsModal(); };
+    ml.appendChild(row);
+  }
+  // labels
+  const ll = $('settings-labels-list'); ll.innerHTML = '';
+  for(const l of b.labels){
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px;';
+    row.innerHTML = `<span class="label-chip named" style="background:${l.color}">${escapeHtml(l.name)}</span><input type="text" value="${escapeHtml(l.name)}" style="flex:1;"><input type="color" value="${l.color}" style="width:36px;padding:0;"><button>✕</button>`;
+    const [_chip, nameI, colorI, rm] = row.children;
+    nameI.dataset.labelId  = l.id;
+    colorI.dataset.labelId = l.id;
+    rm.onclick = () => { b.labels = b.labels.filter(x => x.id !== l.id); openSettingsModal(); };
+    ll.appendChild(row);
+  }
+}
+function addColumnFromSettings(){
+  const b = currentBoard(); if(!b) return;
+  saveSettingsModal(true);
+  b.columns.push({ id:uid(), name:'New column', wipLimit:0, collapsed:false, cardIds:[] });
+  openSettingsModal();
+}
+function addMemberFromSettings(){
+  const b = currentBoard(); if(!b) return;
+  const name = $('settings-new-member').value.trim();
+  if(!name) return;
+  saveSettingsModal(true);
+  b.members.push({ id:uid(), name, color:LABEL_COLORS[b.members.length % LABEL_COLORS.length] });
+  $('settings-new-member').value = '';
+  openSettingsModal();
+}
+function addLabelFromSettings(){
+  const b = currentBoard(); if(!b) return;
+  const name = $('settings-new-label').value.trim();
+  if(!name) return;
+  saveSettingsModal(true);
+  b.labels.push({ id:uid(), name, color:LABEL_COLORS[b.labels.length % LABEL_COLORS.length] });
+  $('settings-new-label').value = '';
+  openSettingsModal();
+}
+function saveSettingsModal(skipClose){
+  const b = currentBoard(); if(!b) return;
+  b.name = $('settings-board-name').value.trim() || b.name;
+  // columns
+  for(const inp of $('settings-columns-list').querySelectorAll('input[type=text][data-col-id]')){
+    const c = b.columns.find(x => x.id === inp.dataset.colId);
+    if(c) c.name = inp.value.trim() || c.name;
+  }
+  for(const inp of $('settings-columns-list').querySelectorAll('input[type=number][data-col-id]')){
+    const c = b.columns.find(x => x.id === inp.dataset.colId);
+    if(c) c.wipLimit = parseInt(inp.value, 10) || 0;
+  }
+  for(const inp of $('settings-members-list').querySelectorAll('input[type=text][data-member-id]')){
+    const m = b.members.find(x => x.id === inp.dataset.memberId);
+    if(m) m.name = inp.value.trim() || m.name;
+  }
+  for(const inp of $('settings-labels-list').querySelectorAll('input[type=text][data-label-id]')){
+    const l = b.labels.find(x => x.id === inp.dataset.labelId);
+    if(l) l.name = inp.value.trim() || l.name;
+  }
+  for(const inp of $('settings-labels-list').querySelectorAll('input[type=color][data-label-id]')){
+    const l = b.labels.find(x => x.id === inp.dataset.labelId);
+    if(l) l.color = inp.value;
+  }
+  rebuildBoardOrder();
+  scheduleSave();
+  if(!skipClose){ closeModal(); renderAll(); }
+}
+
+/* ============================================================
+   Import / export
+   ============================================================ */
+
+function downloadFile(filename, content, type='application/json'){
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function exportCurrentBoard(){
+  const b = currentBoard(); if(!b){ toast('No board'); return; }
+  downloadFile(slugify(b.name)+'.kanzen.json', JSON.stringify(b, null, 2));
+}
+function exportAllBoards(){
+  const payload = { kanzenVersion:1, exportedAt: new Date().toISOString(), boards: S.boards };
+  downloadFile('kanzen-export-' + new Date().toISOString().slice(0,10) + '.json', JSON.stringify(payload, null, 2));
+}
+async function onImportFile(e){
+  const file = e.target.files[0]; if(!file) return;
+  const text = await file.text();
+  let json;
+  try{ json = JSON.parse(text); }catch(_){ toast('Invalid JSON'); return; }
+  const mode = document.querySelector('input[name=import-mode]:checked').value;
+  if(mode === 'replace'){
+    if(!confirm('Replace ALL boards with the imported data? This cannot be undone.')) { e.target.value=''; return; }
+    for(const id of Object.keys(S.boards)) await storage.deleteBoard(S.boards[id]);
+    S.boards = {};
+  }
+  // accept either single-board format or {boards:{...}} multi-board
+  const incoming = json.boards ? json.boards : { [json.id || uid()]: json };
+  for(const id of Object.keys(incoming)){
+    const b = incoming[id];
+    if(!b || !b.columns || !b.cards){ continue; }
+    if(!b.id) b.id = id;
+    if(S.boards[b.id]){
+      // collision: assign a new id
+      b.id = uid();
+      if(b._meta) b._meta.boardId = b.id;
+    }
+    if(!b._meta) b._meta = { boardId:b.id, lastModified:now(), kanzenVersion:1 };
+    S.boards[b.id] = b;
+    await storage.saveBoard(b);
+  }
+  rebuildBoardOrder();
+  if(!S.currentBoardId || !S.boards[S.currentBoardId]) S.currentBoardId = S.boardOrder[0] || null;
+  S.settings.lastBoardId = S.currentBoardId;
+  await storage.saveSettings(S.settings);
+  e.target.value = '';
+  closeModal();
+  renderAll();
+  toast('Import complete');
+}
+
+/* ============================================================
+   Modal plumbing
+   ============================================================ */
+
+function openModal(id){
+  $('modal-overlay').classList.add('open');
+  for(const m of document.querySelectorAll('#modal-overlay .modal')) m.classList.remove('open');
+  $(id).classList.add('open');
+  if(id === 'settings-modal') openSettingsModal();
+  if(id === 'import-export-modal') refreshStorageStatus();
+}
+function closeModal(){
+  $('modal-overlay').classList.remove('open');
+  for(const m of document.querySelectorAll('#modal-overlay .modal')) m.classList.remove('open');
+  S.editingCardId = null;
+}
+function onOverlayClick(e){
+  if(e.target.id === 'modal-overlay') closeModal();
+}
+
+/* ============================================================
+   Theme
+   ============================================================ */
+
+function toggleTheme(){
+  const cur = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  S.settings.theme = next;
+  storage.saveSettings(S.settings);
+}
+function applyTheme(){
+  document.documentElement.dataset.theme = S.settings.theme || 'light';
+}
+
+/* ============================================================
+   Filters & search
+   ============================================================ */
+
+function clearFilters(){
+  S.filter = { search:'', labelId:'', priority:'', due:'', memberId:'' };
+  renderFilters();
+  renderBoard();
+}
+
+/* ============================================================
+   Keyboard shortcuts
+   ============================================================ */
+
+function isTypingTarget(el){
+  if(!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
+function onKey(e){
+  if(e.key === 'Escape'){
+    if($('modal-overlay').classList.contains('open')){ closeModal(); return; }
+  }
+  if(isTypingTarget(e.target)) return;
+  if(e.key === '/'){
+    e.preventDefault(); $('search-input').focus(); return;
+  }
+  if(e.key === 'n' || e.key === 'N'){
+    const b = currentBoard(); if(!b || !b.columns.length) return;
+    addCardPrompt(b.columns[0].id); return;
+  }
+  if((e.key === 'e' || e.key === 'E' || e.key === 'Enter') && S.focusedCardId){
+    openCardEditor(S.focusedCardId); e.preventDefault(); return;
+  }
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
+    moveFocus(e.key); e.preventDefault();
+  }
+}
+function moveFocus(key){
+  const b = currentBoard(); if(!b) return;
+  // build [col][cards] grid
+  const grid = b.columns.map(c => ({ col:c, cards:c.cardIds.slice() }));
+  if(!grid.length) return;
+  let ci = 0, ri = 0;
+  if(S.focusedCardId){
+    for(let i = 0; i < grid.length; i++){
+      const idx = grid[i].cards.indexOf(S.focusedCardId);
+      if(idx >= 0){ ci = i; ri = idx; break; }
+    }
+  }
+  if(key === 'ArrowDown') ri++;
+  if(key === 'ArrowUp')   ri--;
+  if(key === 'ArrowRight') ci++;
+  if(key === 'ArrowLeft')  ci--;
+  ci = Math.max(0, Math.min(grid.length - 1, ci));
+  if(!grid[ci].cards.length){ S.focusedCardId = null; renderBoard(); return; }
+  ri = Math.max(0, Math.min(grid[ci].cards.length - 1, ri));
+  S.focusedCardId = grid[ci].cards[ri];
+  renderBoard();
+  const el = document.querySelector(`.card[data-card-id="${S.focusedCardId}"]`);
+  if(el) el.focus();
+}
+
+/* ============================================================
+   init
+   ============================================================ */
+
+async function init(){
+  // load from IDB first (always works), then optionally upgrade to FS
+  try{
+    const { boards, settings } = await StorageIDB.loadAll();
+    S.boards = boards || {};
+    if(settings) S.settings = { ...S.settings, ...settings };
+  }catch(e){ console.warn('IDB load failed', e); }
+
+  rebuildBoardOrder();
+  if(S.settings.lastBoardId && S.boards[S.settings.lastBoardId]){
+    S.currentBoardId = S.settings.lastBoardId;
+  } else {
+    S.currentBoardId = S.boardOrder[0] || null;
+  }
+  if(!S.currentBoardId){
+    const b = newBoard('My first board');
+    S.boards[b.id] = b;
+    S.boardOrder = [b.id];
+    S.currentBoardId = b.id;
+    S.settings.lastBoardId = b.id;
+    await storage.saveBoard(b);
+    await storage.saveSettings(S.settings);
+  }
+
+  applyTheme();
+  renderAll();
+  setSaveIndicator('saved');
+
+  // listeners
+  $('board-select').addEventListener('change', e => switchBoard(e.target.value));
+  $('search-input').addEventListener('input', e => { S.filter.search = e.target.value; renderBoard(); });
+  $('filter-label').addEventListener('change', e => { S.filter.labelId = e.target.value; renderBoard(); });
+  $('filter-priority').addEventListener('change', e => { S.filter.priority = e.target.value; renderBoard(); });
+  $('filter-due').addEventListener('change', e => { S.filter.due = e.target.value; renderBoard(); });
+  $('filter-member').addEventListener('change', e => { S.filter.memberId = e.target.value; renderBoard(); });
+  $('card-desc-input').addEventListener('input', renderDescPreview);
+  document.addEventListener('keydown', onKey);
+  window.addEventListener('beforeunload', () => { if(S.dirty) flushSave(); });
+
+  // periodic save tick
+  setInterval(() => { if(S.dirty) flushSave(); }, 5000);
+
+  // expose for tests
+  window.flushSave = flushSave;
+  window.scheduleSave = scheduleSave;
+}
+
+init();
+</script>
+</body>
+</html>
