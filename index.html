@@ -1097,6 +1097,7 @@
     <button class="icon-btn" onclick="openModal('settings-modal')" title="Board settings" aria-label="Board settings">⚙</button>
     <button class="icon-btn" onclick="openModal('import-export-modal')" title="Import / export" aria-label="Import / export">⇅</button>
     <button class="icon-btn" id="install-btn" style="display:none;" onclick="triggerInstall()" title="Install as app" aria-label="Install as app">⤓</button>
+    <button class="icon-btn" onclick="openModal('prefs-modal')" title="Preferences" aria-label="Preferences">👤</button>
     <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">◐</button>
   </div>
 </header>
@@ -1287,6 +1288,51 @@
         <span class="label-txt">Storage</span>
         <div id="storage-status" style="font-size:12px;color:var(--text-mute);"></div>
       </div>
+    </div>
+    <div class="modal-footer">
+      <div class="spacer"></div>
+      <button onclick="closeModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- first-launch user identity -->
+  <div class="modal" role="dialog" aria-modal="true" id="welcome-modal" style="max-width:440px;">
+    <div class="modal-header">
+      <h2>Welcome to KanZen</h2>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-mute);margin:0 0 12px;">What's your name? It's used to track who made changes to cards. You can change it later in settings.</p>
+      <label class="field">
+        <span class="label-txt">Your name</span>
+        <input id="welcome-name" type="text" placeholder="e.g. Chirag" autofocus>
+      </label>
+      <p style="font-size:11px;color:var(--text-faint);margin:8px 0 0;">Stored locally only. KanZen has no servers, no accounts, no telemetry.</p>
+    </div>
+    <div class="modal-footer">
+      <div class="spacer"></div>
+      <button class="btn-primary" onclick="confirmWelcome()">Get started</button>
+    </div>
+  </div>
+
+  <!-- app preferences -->
+  <div class="modal" role="dialog" aria-modal="true" id="prefs-modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h2>Preferences</h2>
+      <button onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span class="label-txt">Your name (used for "last edited by")</span>
+        <input id="prefs-localuser" type="text" onblur="savePrefName(this.value)">
+      </label>
+      <label class="field">
+        <span class="label-txt">Theme</span>
+        <select id="prefs-theme" onchange="setTheme(this.value)">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+      <p style="font-size:11px;color:var(--text-faint);margin:0;">More preferences (auto-save interval, sync) will land here.</p>
     </div>
     <div class="modal-footer">
       <div class="spacer"></div>
@@ -1853,13 +1899,22 @@ function newBoard(name){
 }
 function newCard(title){
   const id = uid(); const t = now();
+  const u = S.settings.localUser || 'Unknown';
   return {
     id, title, description:'',
     labelIds:[], memberIds:[],
     priority:'none', dueDate:null,
-    checklist:[], attachments:[],
-    createdAt:t, updatedAt:t
+    checklist:[], attachments:[], comments:[],
+    createdBy: u,    createdAt: t,
+    lastModifiedBy: u, lastModifiedAt: t,
+    updatedAt: t
   };
+}
+function stampCard(card){
+  if(!card) return;
+  card.lastModifiedBy = S.settings.localUser || 'Unknown';
+  card.lastModifiedAt = now();
+  card.updatedAt = card.lastModifiedAt;
 }
 function currentBoard(){ return S.currentBoardId ? S.boards[S.currentBoardId] : null; }
 function rebuildBoardOrder(){
@@ -2311,7 +2366,7 @@ function renderCalendarView(area){
       if(_drag?.kind !== 'cal-card') return;
       const card = b.cards[_drag.id]; if(!card) return;
       card.dueDate = day.dataset.date;
-      card.updatedAt = now();
+      stampCard(card);
       _drag = null;
       logActivity('card-edit', `Set due date of "${card.title}" to ${card.dueDate}`);
       scheduleSave();
@@ -2446,6 +2501,7 @@ function onColDrop(e, colId){
     fromCol.cardIds = fromCol.cardIds.filter(x => x !== cardId);
     const toCol = b.columns.find(c => c.id === colId);
     if(!toCol) return;
+    stampCard(b.cards[cardId]);
     if(fromCol.id !== toCol.id){
       const card = b.cards[cardId];
       logActivity('card-move', `Moved "${card?.title || 'card'}" from ${fromCol.name} to ${toCol.name}`);
@@ -2612,8 +2668,23 @@ function openCardEditor(cardId){
   renderEditorMembers();
   renderEditorAttachments();
   renderEditorComments();
+  renderEditorAuthor(card);
   openModal('card-modal');
   setTimeout(() => $('card-title-input').focus(), 50);
+}
+function renderEditorAuthor(card){
+  let el = $('editor-author');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'editor-author';
+    el.style.cssText = 'font-size:11px;color:var(--text-faint);margin-top:8px;text-align:right;';
+    $('card-modal').querySelector('.modal-body').appendChild(el);
+  }
+  const lmb = card.lastModifiedBy || 'Unknown';
+  const lma = card.lastModifiedAt ? relTime(card.lastModifiedAt) : '—';
+  const cb  = card.createdBy || 'Unknown';
+  const ca  = card.createdAt ? relTime(card.createdAt) : '—';
+  el.textContent = `Last edited by ${lmb} · ${lma}    ·    Created by ${cb} · ${ca}`;
 }
 function renderEditorComments(){
   const b = currentBoard(); const card = b.cards[S.editingCardId]; if(!card) return;
@@ -2787,7 +2858,7 @@ function saveCardModal(){
   card.description = $('card-desc-input').value;
   card.priority    = $('card-priority').value;
   card.dueDate     = $('card-due').value || null;
-  card.updatedAt   = now();
+  stampCard(card);
   logActivity('card-edit', `Edited card "${card.title}"`);
   closeModal();
   scheduleSave();
@@ -2991,6 +3062,7 @@ function openModal(id){
   if(id === 'import-export-modal') refreshStorageStatus();
   if(id === 'snapshots-modal') renderSnapshotsList();
   if(id === 'activity-modal') renderActivityModal();
+  if(id === 'prefs-modal') openPrefsModal();
 }
 function closeModal(){
   $('modal-overlay').classList.remove('open');
@@ -3007,13 +3079,42 @@ function onOverlayClick(e){
 
 function toggleTheme(){
   const cur = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
-  const next = cur === 'dark' ? 'light' : 'dark';
-  document.documentElement.dataset.theme = next;
-  S.settings.theme = next;
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+}
+function setTheme(t){
+  document.documentElement.dataset.theme = t;
+  S.settings.theme = t;
   storage.saveSettings(S.settings);
 }
 function applyTheme(){
   document.documentElement.dataset.theme = S.settings.theme || 'light';
+}
+
+/* ---------- welcome / prefs ---------- */
+function showWelcomeIfNeeded(){
+  if(!S.settings.localUser){
+    openModal('welcome-modal');
+    setTimeout(() => $('welcome-name').focus(), 80);
+  }
+}
+function confirmWelcome(){
+  const name = $('welcome-name').value.trim();
+  if(!name){ $('welcome-name').focus(); return; }
+  S.settings.localUser = name;
+  storage.saveSettings(S.settings);
+  closeModal();
+  toast(`Welcome, ${name}`);
+}
+function openPrefsModal(){
+  $('prefs-localuser').value = S.settings.localUser || '';
+  $('prefs-theme').value = S.settings.theme || 'light';
+}
+function savePrefName(name){
+  name = (name || '').trim();
+  if(!name) return;
+  S.settings.localUser = name;
+  storage.saveSettings(S.settings);
+  toast('Name updated');
 }
 
 /* ============================================================
@@ -3805,6 +3906,7 @@ function moveCardTo(cardId, toColId){
   if(!toCol) return;
   toCol.cardIds.push(cardId);
   const card = b.cards[cardId];
+  stampCard(card);
   logActivity('card-move', `Moved "${card?.title || 'card'}" from ${fromCol.name} to ${toCol.name}`);
   scheduleSave();
   closeMovePopover();
@@ -3850,6 +3952,7 @@ async function init(){
   if(S.currentBoardId){ pushHistory(); }
   detectShareInHash();
   maybeDailySnapshot();
+  showWelcomeIfNeeded();
 
   // listeners
   $('board-select').addEventListener('change', e => switchBoard(e.target.value));
