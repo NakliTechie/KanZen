@@ -2,6 +2,8 @@
 
 **Kanban without the noise.** Single-HTML-file, local-first Trello alternative. Zero server, zero account, zero board limits.
 
+> **Live: [kanzen.naklitechie.com](https://kanzen.naklitechie.com/)**
+
 Boards live on your device — as plain `.kanzen.json` files in a folder you choose. Period.
 
 > *Kanban + Zen (simplicity). Also 完全 (kanzen) — Japanese for "complete" or "perfect."*
@@ -14,21 +16,41 @@ Boards live on your device — as plain `.kanzen.json` files in a folder you cho
 - No build step, no dependencies, no telemetry, no account
 - Drop the folder in Dropbox / iCloud / Syncthing / git → multi-device for free
 
-## Features (v1)
+## Features
 
+**Boards & cards**
 - Multiple boards with a switcher
 - Columns: create, rename, reorder by drag, delete, collapse, soft WIP limits
-- Cards: title, markdown description, due date, priority, labels, members, checklists, file attachments
+- Cards: title, markdown description, due date, priority, labels, members, checklists, file attachments, comments
 - Drag-and-drop cards between and within columns
+- Per-board background (gradient / solid / custom colour)
+
+**Views**
+- Board (kanban), List (sortable table), Calendar (month grid with drag-to-set-due-date)
 - Global search and filters (label, priority, due bucket, member) — non-matching cards **dim** instead of hiding
+
+**History & sharing**
+- Snapshots: manual or auto (before destructive actions, optional daily). Compare any two snapshots — card-level diff (added / removed / modified)
+- Undo / redo (`Cmd/Ctrl+Z` and `Shift+Z`), 50-deep per board
+- Activity feed of every change
+- URL sharing: encrypted (AES-GCM 256, PBKDF2 200K) or plain, pako-compressed, with size gate and QR code. The hash fragment never leaves the browser
+
+**Storage & interop**
 - Auto-save every 5 s on changes; immediate save on destructive actions
 - Per-board and full-state JSON export / import (merge or replace)
+- CSV and Markdown export
+- Trello JSON import (lists, cards, labels, members, checklists)
+- PWA-lite: inline manifest, installable as an app
+
+**UI**
 - Dark / light theme
-- Keyboard shortcuts: `N` new card, `E` edit, `/` search, arrows to navigate
+- Keyboard shortcuts: `N` new card, `E` edit, `/` search, arrows to navigate, `Cmd/Ctrl+Z` undo
+- Touch: long-press a card → "Move to" popover
+- ARIA roles, `prefers-reduced-motion` and `prefers-contrast` support
 
 ## Run
 
-Just open `index.html` in a modern browser, or serve the folder:
+Just visit **[kanzen.naklitechie.com](https://kanzen.naklitechie.com/)** in any modern browser. Or, to host it yourself:
 
 ```bash
 python3 -m http.server 8000
@@ -39,7 +61,7 @@ The File System Access API requires HTTPS or `localhost`. IndexedDB fallback wor
 
 ## Privacy
 
-Nothing leaves your machine. There is no server. The author cannot see your boards.
+Nothing leaves your machine. There is no server. The author cannot see your boards. Even share URLs encode the board into the hash fragment, which is never sent to any server — not even to Cloudflare Pages, where this site is hosted.
 
 ## Author
 
