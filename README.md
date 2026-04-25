@@ -52,9 +52,26 @@ Boards live on your device — as plain `.kanzen.json` files in a folder you cho
 
 **UI**
 - Dark / light theme
+- Palette picker (🎨 in the header) — switch between Trello-default and curated [Rangrez](https://github.com/NakliTechie/rangrez) palettes (SUMI, KINARI, TADELAKT, SANG, SNÖ, MUMBAI ART DECO). Choice persists per browser.
 - Keyboard shortcuts: `N` new card, `E` edit, `/` search, arrows to navigate, `Cmd/Ctrl+Z` undo
 - Touch: long-press a card → "Move to" popover
 - ARIA roles, `prefers-reduced-motion` and `prefers-contrast` support
+
+## Palette
+
+KanZen ships with seven runtime-switchable palettes. Click the 🎨 icon in the top-right to open the picker:
+
+| | |
+| --- | --- |
+| **Default Trello** | Atlassian blue gradient — the original chrome |
+| **SUMI 墨** | Zen monochrome calligraphy ink — `japan-03` |
+| **KINARI 生成り** | Edo merchant ledger, washi paper — `japan-02` |
+| **TADELAKT تادلكت** | Polished lime-soap riad wall — `morocco-01` |
+| **SANG سنگ** | Persepolis travertine — `iran-01` |
+| **SNÖ** | First snowfall, frozen lake — `scandinavia-01` |
+| **MUMBAI ART DECO** | Marine Drive at dusk — `india_west-01` |
+
+Palettes come from the [Rangrez](https://github.com/NakliTechie/rangrez) library — 240 palettes with country-specific color stories. Your choice is persisted in `localStorage` (key `kanzen.palette`) and survives reloads.
 
 ## Run
 
