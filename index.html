@@ -5217,7 +5217,12 @@ async function init(){
   window.storage = storage;
 }
 
-init();
+function notifyNakliOSReady(){
+  if(window.parent===window) return;
+  try{ window.parent.postMessage({type:'naklios:ready'},'*'); }catch{}
+}
+
+init().then(notifyNakliOSReady);
 </script>
 </body>
 </html>
