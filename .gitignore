@@ -9,6 +9,10 @@
 !worker/src/
 !worker/src/index.js
 !worker/README.md
+!scripts/
+!scripts/**
+!test/
+!test/**
 
 # wrangler files
 .wrangler

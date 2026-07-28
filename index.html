@@ -1337,7 +1337,7 @@
   </div>
   <input class="header-search" id="search-input" type="text" placeholder="Search cards…">
   <div class="save-indicator" id="save-indicator">Ready</div>
-  <button id="storage-hint" class="icon-btn" style="display:none;width:auto;padding:4px 8px;font-size:11px;font-weight:500;gap:4px;" onclick="connectFolder()" title="Boards live in browser storage. Click to save them to a folder on disk.">📁 Save to disk</button>
+  <button id="storage-hint" class="icon-btn" style="display:none;width:auto;padding:4px 8px;font-size:11px;font-weight:500;gap:4px;" onclick="handleStorageButton()" title="Choose where this board library lives.">📁 Save to disk</button>
   <button id="sync-indicator" class="icon-btn" style="display:none;width:auto;padding:4px 8px;font-size:11px;gap:4px;" onclick="onSyncClick()" title="Cloud sync"></button>
   <button class="help-btn" onclick="openModal('help-modal')" title="Help">?</button>
   <div class="header-actions">
@@ -1386,6 +1386,21 @@
 
 <!-- ===== modal overlay (must precede script) ===== -->
 <div id="modal-overlay" onclick="onOverlayClick(event)">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="hosted-storage-title" id="hosted-storage-modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h2 id="hosted-storage-title">KanZen storage</h2>
+      <button onclick="closeModal()" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-mute);margin:0 0 12px;line-height:1.55;">
+        Each location has its own board library. Switching never copies, merges, or deletes boards.
+      </p>
+      <div id="hosted-storage-choices" style="display:grid;gap:8px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
 
   <!-- card editor -->
   <div class="modal" role="dialog" aria-modal="true" id="card-modal">
@@ -1859,6 +1874,93 @@
    Single-file local-first kanban
    ============================================================ */
 
+/*
+ * naklios.js — cooperative SDK, vendored inline to preserve KanZen's
+ * single-file/offline distribution. Standalone-safe.
+ * Canonical source: https://naklios.dev/sdk/naklios.js (MIT).
+ */
+(function installNakliOSSdk(){
+  if(window.naklios) return;
+  let hosted=false;
+  try{ hosted=!!(window.parent&&window.parent!==window); }catch(_){}
+  let theme=null, beforeCloseCb=null, rpcCounter=0;
+  const themeListeners=new Set(), capabilityListeners=new Set(), pending=new Map();
+  const capabilities={hosted,version:1,fs:false,fsBackends:[],fsBackend:null};
+  function send(type,data){
+    if(!hosted) return;
+    try{ window.parent.postMessage(Object.assign({type},data||{}),'*'); }catch(_){}
+  }
+  function rpc(type,payload){
+    if(!hosted) return Promise.reject(new Error('Not hosted — naklios.* unavailable standalone'));
+    return new Promise((resolve,reject)=>{
+      const requestId='r'+(++rpcCounter)+'_'+Date.now();
+      pending.set(requestId,{resolve,reject});
+      send(type,Object.assign({requestId},payload||{}));
+      setTimeout(()=>{
+        if(!pending.has(requestId)) return;
+        pending.delete(requestId);
+        reject(new Error('naklios RPC timeout: '+type));
+      },30000);
+    });
+  }
+  const fsPayload=(data)=>Object.assign({backend:capabilities.fsBackend},data);
+  window.addEventListener('message',event=>{
+    if(hosted&&event.source!==window.parent) return;
+    const msg=event.data;
+    if(!msg||typeof msg!=='object') return;
+    if(msg.type==='naklios:theme'){
+      theme={id:msg.theme,colors:msg.colors,mood:msg.mood};
+      themeListeners.forEach(cb=>{ try{ cb(theme); }catch(_){} });
+    }else if(msg.type==='naklios:beforeclose'){
+      try{ beforeCloseCb?.(); }catch(_){}
+    }else if(msg.type==='naklios:capabilities'){
+      if(typeof msg.fs==='boolean') capabilities.fs=msg.fs;
+      if(Array.isArray(msg.fsBackends)) capabilities.fsBackends=msg.fsBackends;
+      capabilities.fsBackend=typeof msg.fsBackend==='string'?msg.fsBackend:null;
+      capabilityListeners.forEach(cb=>{ try{ cb(capabilities); }catch(_){} });
+    }else if(msg.type==='naklios:fs:reply'&&msg.requestId){
+      const entry=pending.get(msg.requestId);
+      if(!entry) return;
+      pending.delete(msg.requestId);
+      if(msg.error) entry.reject(new Error(msg.error)); else entry.resolve(msg.result);
+    }
+  });
+  window.naklios={
+    version:1,capabilities,
+    ready:()=>send('naklios:ready'),
+    title:value=>send('naklios:title',{title:String(value)}),
+    close:()=>send('naklios:close'),
+    beforeClose:cb=>{ beforeCloseCb=typeof cb==='function'?cb:null; },
+    theme:{
+      get current(){ return theme; },
+      onChange(cb){
+        if(typeof cb!=='function') return ()=>{};
+        themeListeners.add(cb);
+        if(theme) try{ cb(theme); }catch(_){}
+        return ()=>themeListeners.delete(cb);
+      },
+      request:()=>send('naklios:theme-request'),
+    },
+    onCapabilitiesChange(cb){
+      if(typeof cb!=='function') return ()=>{};
+      capabilityListeners.add(cb);
+      try{ cb(capabilities); }catch(_){}
+      return ()=>capabilityListeners.delete(cb);
+    },
+    requestCapabilities:()=>send('naklios:capabilities-request'),
+    fs:{
+      read:path=>rpc('naklios:fs:read',fsPayload({path})),
+      readBinary:path=>rpc('naklios:fs:readBinary',fsPayload({path})),
+      write:(path,data)=>rpc('naklios:fs:write',fsPayload({path,data})),
+      append:(path,line)=>rpc('naklios:fs:append',fsPayload({path,line})),
+      list:prefix=>rpc('naklios:fs:list',fsPayload({prefix:prefix||''})),
+      delete:path=>rpc('naklios:fs:delete',fsPayload({path})),
+      exists:path=>rpc('naklios:fs:exists',fsPayload({path})),
+      useBackend:backend=>rpc('naklios:fs:selectBackend',{backend}),
+    },
+  };
+})();
+
 /* Apply persisted palette ASAP to avoid flash of unstyled board */
 try {
   const _p = localStorage.getItem('kanzen.palette');
@@ -1886,7 +1988,10 @@ function escapeHtml(s){
     .replaceAll('"','&quot;').replaceAll("'",'&#39;');
 }
 function debounce(fn, ms){
-  let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); };
+  let t;
+  const wrapped=(...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); };
+  wrapped.cancel=()=>{ clearTimeout(t); t=null; };
+  return wrapped;
 }
 /* JSON serializer with deterministic sorted keys — makes git diffs sane */
 function sortedKeysReplacer(k, v){
@@ -2002,7 +2107,8 @@ const S = window.S = {
   currentBoardId: null,
   settings: { theme:'light', lastBoardId:null, version:1 },
   dirty: false,
-  storageMode: 'idb',  // 'fs' | 'idb'
+  storageMode: 'idb',  // 'idb' | 'fs' | 'naklios'
+  _nakliosBackend: null,
   dirHandle: null,
   filter: { search:'', labelId:'', priority:'', due:'', memberId:'' },
   focusedCardId: null,
@@ -2340,26 +2446,181 @@ const StorageFS = {
   }
 };
 
+/*
+ * Hosted Folder/Crate adapter. NakliOS scopes every path below
+ * apps/kanzen/ on the selected backend. It intentionally does not mirror to
+ * IndexedDB: Browser, Folder, and Crate are distinct board libraries.
+ */
+const StorageNakliOS = {
+  fileNameFor(board){ return StorageFS.fileNameFor(board); },
+  async names(prefix){
+    const rows=await naklios.fs.list(prefix);
+    return (Array.isArray(rows)?rows:[]).map(value=>String(value).replace(/^\/+/,''));
+  },
+  async readJson(path){ return JSON.parse(await naklios.fs.read(path)); },
+  async loadTeamBoard(dirName){
+    const root='boards/'+dirName+'/';
+    const board=await this.readJson(root+'_board.json');
+    if(!board._meta) board._meta={};
+    board._meta.teamMode=true;
+    board._meta.filename=dirName;
+    board.cards={};
+    for(const path of await this.names(root+'cards')){
+      if(!path.endsWith('.json')) continue;
+      try{
+        const card=await this.readJson(path);
+        if(card?.id) board.cards[card.id]=card;
+      }catch(_){}
+    }
+    board.activity=[];
+    try{
+      const text=await naklios.fs.read(root+'_activity.jsonl');
+      for(const line of text.split(/\r?\n/).filter(Boolean)){
+        try{ board.activity.push(JSON.parse(line)); }catch(_){}
+      }
+      board.activity.reverse();
+    }catch(_){}
+    board._activityFlushed=board.activity.length;
+    return board;
+  },
+  async writeTeamBoard(board){
+    const dirName=this.fileNameFor(board);
+    const root='boards/'+dirName+'/';
+    const meta={};
+    for(const key of Object.keys(board)){
+      if(key==='cards'||key==='activity'||key.startsWith('_')) continue;
+      meta[key]=board[key];
+    }
+    meta._meta={...(board._meta||{}),teamMode:true,lastModified:now()};
+    delete meta._meta.filename;
+    await naklios.fs.write(root+'_board.json',stableJson(meta));
+    const dirty=board._dirtyCards instanceof Set
+      ? board._dirtyCards : new Set(Object.keys(board.cards||{}));
+    for(const cardId of dirty){
+      const card=board.cards?.[cardId];
+      if(card) await naklios.fs.write(root+'cards/'+cardId+'.json',stableJson(card));
+    }
+    const deleted=board._deletedCards instanceof Set?board._deletedCards:new Set();
+    for(const cardId of deleted){
+      try{ await naklios.fs.delete(root+'cards/'+cardId+'.json'); }catch(_){}
+    }
+    const flushed=board._activityFlushed||0;
+    const newCount=(board.activity?.length||0)-flushed;
+    if(newCount>0){
+      const lines=board.activity.slice(0,newCount).slice().reverse()
+        .map(entry=>JSON.stringify(entry)).join('\n');
+      await naklios.fs.append(root+'_activity.jsonl',lines);
+      board._activityFlushed=board.activity.length;
+    }
+    board._dirtyCards=new Set();
+    board._deletedCards=new Set();
+  },
+  async loadAll(){
+    const boards={};
+    let settings=null;
+    for(const path of await this.names('boards')){
+      if(path.endsWith('.kanzen.json')){
+        try{
+          const board=await this.readJson(path);
+          if(!board?.id) continue;
+          if(!board._meta) board._meta={};
+          board._meta.filename=path.split('/').pop();
+          board._meta.teamMode=false;
+          boards[board.id]=board;
+        }catch(e){ console.warn('Failed to load hosted board',path,e); }
+      }else if(path.endsWith('/')){
+        const dirName=path.replace(/^boards\//,'').replace(/\/$/,'');
+        if(!dirName||dirName.includes('/')) continue;
+        try{
+          const board=await this.loadTeamBoard(dirName);
+          if(board?.id) boards[board.id]=board;
+        }catch(_){}
+      }
+    }
+    try{ settings=await this.readJson('kanzen-settings.json'); }catch(_){}
+    return {boards,settings};
+  },
+  async saveBoard(board){
+    if(board._meta?.teamMode) return this.writeTeamBoard(board);
+    await naklios.fs.write('boards/'+this.fileNameFor(board),stableJson(board));
+    if(board._dirtyCards) board._dirtyCards=new Set();
+    if(board._deletedCards) board._deletedCards=new Set();
+  },
+  async deleteBoard(board){
+    const path='boards/'+this.fileNameFor(board);
+    try{ await naklios.fs.delete(path); }catch(_){}
+  },
+  async saveSettings(settings){
+    await naklios.fs.write('kanzen-settings.json',stableJson(settings));
+  },
+  async saveSnapshot(filename,boardId,snapshotJson){
+    await naklios.fs.write('_snapshots/'+filename,stableJson(snapshotJson));
+  },
+  async listSnapshots(boardId){
+    const rows=[];
+    for(const path of await this.names('_snapshots')){
+      if(!path.endsWith('.kanzen.json')) continue;
+      try{
+        const data=await this.readJson(path);
+        if(data?._snapshot?.boardId===boardId){
+          rows.push({
+            filename:path.split('/').pop(),
+            boardId,
+            takenAt:data._snapshot.takenAt,
+            data,
+          });
+        }
+      }catch(_){}
+    }
+    return rows.sort((a,b)=>tsMs(b.takenAt)-tsMs(a.takenAt));
+  },
+  async loadSnapshot(filename){
+    const data=await this.readJson('_snapshots/'+filename);
+    return {
+      filename,
+      boardId:data?._snapshot?.boardId,
+      takenAt:data?._snapshot?.takenAt,
+      data,
+    };
+  },
+  async deleteSnapshot(filename){
+    try{ await naklios.fs.delete('_snapshots/'+filename); }catch(_){}
+  },
+};
+
+function activeStorageAdapter(){
+  if(S.storageMode==='naklios') return StorageNakliOS;
+  if(S.storageMode==='fs') return StorageFS;
+  return StorageIDB;
+}
+
 const storage = {
-  async loadAll(){ return S.storageMode === 'fs' ? StorageFS.loadAll() : StorageIDB.loadAll(); },
+  async loadAll(){ return activeStorageAdapter().loadAll(); },
   async saveBoard(b){
-    // always mirror to IDB cache so the user has an offline fallback even after disconnecting the folder
+    if(S.storageMode==='naklios') return StorageNakliOS.saveBoard(b);
+    // Direct local folders retain the historic IndexedDB safety mirror.
     await StorageIDB.saveBoard(b);
-    if(S.storageMode === 'fs'){ try{ await StorageFS.saveBoard(b); }catch(e){ console.error(e); throw e; } }
+    if(S.storageMode==='fs'){
+      try{ await StorageFS.saveBoard(b); }catch(e){ console.error(e); throw e; }
+    }
   },
   async deleteBoard(b){
+    if(S.storageMode==='naklios') return StorageNakliOS.deleteBoard(b);
     await StorageIDB.deleteBoard(b);
     if(S.storageMode === 'fs'){ try{ await StorageFS.deleteBoard(b); }catch(e){ console.error(e); } }
   },
   async saveSettings(s){
+    if(S.storageMode==='naklios') return StorageNakliOS.saveSettings(s);
     await StorageIDB.saveSettings(s);
     if(S.storageMode === 'fs'){ try{ await StorageFS.saveSettings(s); }catch(e){ console.error(e); } }
   },
   async saveSnapshot(filename, boardId, snapshotJson){
+    if(S.storageMode==='naklios') return StorageNakliOS.saveSnapshot(filename,boardId,snapshotJson);
     await StorageIDB.saveSnapshot(filename, boardId, snapshotJson);
     if(S.storageMode === 'fs'){ try{ await StorageFS.saveSnapshot(filename, boardId, snapshotJson); }catch(e){ console.error(e); } }
   },
   async listSnapshots(boardId){
+    if(S.storageMode==='naklios') return StorageNakliOS.listSnapshots(boardId);
     if(S.storageMode === 'fs'){
       try{
         const fsRows = await StorageFS.listSnapshots(boardId);
@@ -2369,12 +2630,14 @@ const storage = {
     return StorageIDB.listSnapshots(boardId);
   },
   async loadSnapshot(filename){
+    if(S.storageMode==='naklios') return StorageNakliOS.loadSnapshot(filename);
     if(S.storageMode === 'fs'){
       try{ return await StorageFS.loadSnapshot(filename); }catch(_){}
     }
     return StorageIDB.loadSnapshot(filename);
   },
   async deleteSnapshot(filename){
+    if(S.storageMode==='naklios') return StorageNakliOS.deleteSnapshot(filename);
     await StorageIDB.deleteSnapshot(filename);
     if(S.storageMode === 'fs'){ try{ await StorageFS.deleteSnapshot(filename); }catch(_){} }
   }
@@ -2411,6 +2674,134 @@ async function tryReuseStoredHandle(){
     S._pendingHandle = stored;
   }catch(_){}
   return false;
+}
+
+function nakliOSBackendIds(){
+  const rows=Array.isArray(naklios.capabilities.fsBackends)
+    ? naklios.capabilities.fsBackends : [];
+  return rows.map(row=>typeof row==='string'?row:row?.id)
+    .filter(id=>id==='fsa'||id==='crate');
+}
+function nakliOSBackendLabel(id){ return id==='crate'?'Crate':'NakliOS Folder'; }
+function currentNakliOSBackend(){
+  const id=naklios.capabilities.fsBackend;
+  return id==='fsa'||id==='crate'?id:null;
+}
+function waitForNakliOSCapabilities(timeout=1600){
+  if(!naklios.capabilities.hosted) return Promise.resolve(naklios.capabilities);
+  return new Promise(resolve=>{
+    let settled=false;
+    let off=()=>{};
+    const done=()=>{
+      if(settled) return;
+      settled=true;
+      off();
+      resolve(naklios.capabilities);
+    };
+    off=naklios.onCapabilitiesChange(caps=>{
+      if(caps.fs||caps.fsBackends.length) done();
+    });
+    naklios.requestCapabilities();
+    setTimeout(done,timeout);
+  });
+}
+async function activateLibrary(mode,adapter){
+  S.storageMode=mode;
+  S.dirHandle=mode==='fs'?StorageFS.dirHandle:null;
+  const loaded=await adapter.loadAll();
+  S.boards={};
+  for(const id of Object.keys(loaded.boards||{})){
+    S.boards[id]=migrateLoadedBoard(loaded.boards[id]);
+  }
+  S.settings={
+    theme:'light',
+    lastBoardId:null,
+    version:1,
+    ...(loaded.settings||{}),
+  };
+  rebuildBoardOrder();
+  S.currentBoardId=S.settings.lastBoardId&&S.boards[S.settings.lastBoardId]
+    ? S.settings.lastBoardId : (S.boardOrder[0]||null);
+  if(!S.currentBoardId){
+    const board=newBoard('My first board');
+    S.boards[board.id]=board;
+    S.boardOrder=[board.id];
+    S.currentBoardId=board.id;
+    S.settings.lastBoardId=board.id;
+    await adapter.saveBoard(board);
+    await adapter.saveSettings(S.settings);
+  }
+  S.dirty=false;
+  applyTheme();
+  applyPalette();
+  renderAll();
+  refreshStorageStatus();
+  setSaveIndicator('saved');
+}
+async function switchNakliOSBackend(id){
+  if(id===currentNakliOSBackend()&&S.storageMode==='naklios'){
+    closeModal();
+    return;
+  }
+  const previousBackend=S._nakliosBackend;
+  try{
+    if(S.dirty) await flushSave();
+    S._nakliosBackend=id;
+    const changed=await naklios.fs.useBackend(id);
+    if(!changed){ S._nakliosBackend=previousBackend; return; }
+    naklios.capabilities.fsBackend=id;
+    await activateLibrary('naklios',StorageNakliOS);
+    closeModal();
+    toast(`Now using ${nakliOSBackendLabel(id)}. Nothing was copied or deleted.`);
+  }catch(e){
+    S._nakliosBackend=previousBackend;
+    console.error(e);
+    toast('Could not switch storage: '+e.message);
+  }
+}
+async function switchToBrowserStorage(){
+  try{
+    if(S.dirty) await flushSave();
+    await activateLibrary('idb',StorageIDB);
+    closeModal();
+    toast('Now using this browser. Hosted boards were left untouched.');
+  }catch(e){
+    console.error(e);
+    toast('Could not open browser storage');
+  }
+}
+function showHostedStorageChooser(){
+  const active=S.storageMode==='naklios'?currentNakliOSBackend():null;
+  const choices=$('hosted-storage-choices');
+  const button=(label,detail,onclick,isCurrent=false)=>{
+    const el=document.createElement('button');
+    el.className='btn-ghost';
+    el.style.cssText='text-align:left;padding:10px 12px;display:grid;gap:3px;';
+    el.innerHTML=`<strong>${escapeHtml(label+(isCurrent?' · Current':''))}</strong>`
+      +`<span style="font-size:11px;color:var(--text-mute)">${escapeHtml(detail)}</span>`;
+    el.onclick=onclick;
+    return el;
+  };
+  choices.innerHTML='';
+  choices.appendChild(button(
+    'This browser',
+    'IndexedDB on this device',
+    switchToBrowserStorage,
+    S.storageMode==='idb',
+  ));
+  for(const id of nakliOSBackendIds()){
+    choices.appendChild(button(
+      nakliOSBackendLabel(id),
+      id==='crate'?'Encrypted, multi-device storage':'The Folder mounted in NakliOS',
+      ()=>switchNakliOSBackend(id),
+      active===id,
+    ));
+  }
+  openModal('hosted-storage-modal');
+}
+function handleStorageButton(){
+  if(naklios.capabilities.hosted) showHostedStorageChooser();
+  else connectFolder();
 }
 
 async function connectFolder(){
@@ -2488,7 +2879,11 @@ function refreshStorageStatus(){
   const el = $('storage-status');
   const hint = $('storage-hint');
   if(el){
-    if(S.storageMode === 'fs'){
+    if(S.storageMode==='naklios'){
+      const id=currentNakliOSBackend();
+      el.innerHTML=`✓ Using <strong>${nakliOSBackendLabel(id)}</strong> through NakliOS. `
+        +'This is a separate library; switching locations never copies or merges boards.';
+    } else if(S.storageMode === 'fs'){
       el.innerHTML = '✓ Connected to local folder. Boards are saved to <code>boards/*.kanzen.json</code> on disk and re-checked for external edits every 5 seconds.';
     } else if(S._pendingHandle){
       el.innerHTML = '⚠ Folder previously connected but permission needs to be re-granted. Click <strong>📁</strong> in the header.';
@@ -2497,7 +2892,12 @@ function refreshStorageStatus(){
     }
   }
   if(hint){
-    if(S.storageMode === 'fs'){
+    if(naklios.capabilities.hosted){
+      hint.style.display='';
+      const id=S.storageMode==='naklios'?currentNakliOSBackend():null;
+      hint.textContent=id?(nakliOSBackendLabel(id)+' ▾'):'This browser ▾';
+      hint.title='Choose Browser, NakliOS Folder, or Crate. Libraries stay separate.';
+    } else if(S.storageMode === 'fs'){
       hint.style.display = 'none';
     } else {
       hint.style.display = '';
@@ -3594,11 +3994,11 @@ function openSettingsModal(){
   // team mode toggle
   const teamToggle = $('team-mode-toggle');
   const teamStatus = $('team-mode-status');
-  const isFs = S.storageMode === 'fs';
+  const isFs = S.storageMode === 'fs' || S.storageMode === 'naklios';
   teamToggle.checked  = !!b._meta?.teamMode;
   teamToggle.disabled = !isFs;
   if(!isFs){
-    teamStatus.textContent = 'Connect a folder to enable team mode.';
+    teamStatus.textContent = 'Choose a Folder or Crate to enable team mode.';
   } else if(b._meta?.teamMode){
     teamStatus.textContent = `On disk as boards/${b._meta.filename}/ — _board.json + cards/<id>.json + _activity.jsonl.`;
   } else {
@@ -4580,8 +4980,8 @@ async function loadSharedBoard(){
 
 async function onTeamModeToggle(on){
   const b = currentBoard(); if(!b) return;
-  if(S.storageMode !== 'fs'){
-    toast('Connect a folder first');
+  if(S.storageMode !== 'fs' && S.storageMode !== 'naklios'){
+    toast('Choose a Folder or Crate first');
     $('team-mode-toggle').checked = !!b._meta?.teamMode;
     return;
   }
@@ -4634,6 +5034,9 @@ async function convertSoloToTeam(board){
       const boardsDir = await StorageFS.ensureBoardsDir();
       await boardsDir.removeEntry(oldFilename);
     }catch(e){ console.warn('Could not delete old solo file', e); }
+  }else if(oldFilename && oldFilename.endsWith('.kanzen.json') && S.storageMode === 'naklios'){
+    try{ await naklios.fs.delete('boards/'+oldFilename); }
+    catch(e){ console.warn('Could not delete old hosted solo file',e); }
   }
 }
 
@@ -4648,6 +5051,9 @@ async function convertTeamToSolo(board){
       const boardsDir = await StorageFS.ensureBoardsDir();
       await StorageFS.deleteTeamBoardDir(boardsDir, oldDirName);
     }catch(e){ console.warn('Could not delete old team dir', e); }
+  }else if(oldDirName && S.storageMode === 'naklios'){
+    try{ await naklios.fs.delete('boards/'+oldDirName); }
+    catch(e){ console.warn('Could not delete old hosted team dir',e); }
   }
 }
 
@@ -5129,16 +5535,35 @@ async function syncPullAll(){
    ============================================================ */
 
 async function init(){
-  // load from IDB first (always works), then optionally upgrade to FS
-  try{
-    const { boards, settings } = await StorageIDB.loadAll();
-    S.boards = boards || {};
-    for(const id in S.boards) migrateLoadedBoard(S.boards[id]);
-    if(settings) S.settings = { ...S.settings, ...settings };
-  }catch(e){ console.warn('IDB load failed', e); }
-
-  // try to silently re-attach to a previously connected folder
-  await tryReuseStoredHandle();
+  let loadedHosted=false;
+  if(naklios.capabilities.hosted){
+    const caps=await waitForNakliOSCapabilities();
+    if(caps.fs){
+      try{
+        S.storageMode='naklios';
+        const {boards,settings}=await StorageNakliOS.loadAll();
+        S.boards=boards||{};
+        for(const id in S.boards) migrateLoadedBoard(S.boards[id]);
+        if(settings) S.settings={...S.settings,...settings};
+        S._nakliosBackend=currentNakliOSBackend();
+        loadedHosted=true;
+      }catch(e){
+        console.warn('NakliOS storage unavailable; keeping browser fallback',e);
+        S.storageMode='idb';
+      }
+    }
+  }
+  if(!loadedHosted){
+    try{
+      const { boards, settings } = await StorageIDB.loadAll();
+      S.boards = boards || {};
+      for(const id in S.boards) migrateLoadedBoard(S.boards[id]);
+      if(settings) S.settings = { ...S.settings, ...settings };
+    }catch(e){ console.warn('IDB load failed', e); }
+    // Direct FSA handles are a standalone feature. Hosted Folder/Crate state
+    // is selected through naklios.fs and never merged with this library.
+    if(!naklios.capabilities.hosted) await tryReuseStoredHandle();
+  }
 
   rebuildBoardOrder();
   if(S.settings.lastBoardId && S.boards[S.settings.lastBoardId]){
@@ -5184,6 +5609,24 @@ async function init(){
   $('card-desc-input').addEventListener('input', renderDescPreview);
   document.addEventListener('keydown', onKey);
   window.addEventListener('beforeunload', () => { if(S.dirty) flushSave(); });
+  naklios.beforeClose(() => { if(S.dirty) flushSave(); });
+  naklios.onCapabilitiesChange(caps => {
+    refreshStorageStatus();
+    const next=caps.fsBackend;
+    if(S.storageMode!=='naklios'||!next||!S._nakliosBackend||next===S._nakliosBackend) return;
+    // A backend can also be changed from NakliOS Settings. Reload the new
+    // isolated library immediately; never flush the old library into it.
+    const hadUnsavedChanges=S.dirty;
+    debouncedSave.cancel();
+    S._nakliosBackend=next;
+    S.dirty=false;
+    activateLibrary('naklios',StorageNakliOS).then(()=>{
+      toast(
+        `${nakliOSBackendLabel(next)} selected in NakliOS. `+
+        (hadUnsavedChanges?'The previous location had unsaved changes; nothing was copied.':'Nothing was copied.'),
+      );
+    }).catch(error=>console.error('Could not reload changed NakliOS backend',error));
+  });
 
   // periodic save tick
   setInterval(() => { if(S.dirty) flushSave(); }, 5000);
@@ -5218,8 +5661,7 @@ async function init(){
 }
 
 function notifyNakliOSReady(){
-  if(window.parent===window) return;
-  try{ window.parent.postMessage({type:'naklios:ready'},'*'); }catch{}
+  naklios.ready();
 }
 
 init().then(notifyNakliOSReady);
