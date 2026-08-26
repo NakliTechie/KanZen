@@ -5,7 +5,10 @@
 !.gitignore
 !worker.js
 !worker/
-!worker/wrangler.toml
+!worker/wrangler.jsonc
+!worker/package.json
+!worker/package-lock.json
+!worker/worker-configuration.d.ts
 !worker/src/
 !worker/src/index.js
 !worker/README.md

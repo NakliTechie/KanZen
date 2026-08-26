@@ -1,0 +1,14 @@
+{
+  "name": "kanzen-sync-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "wrangler deploy --dry-run",
+    "cf-typegen": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260801.1",
+    "@types/node": "^26.1.2",
+    "wrangler": "4.118.0"
+  }
+}

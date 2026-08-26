@@ -1,108 +1,72 @@
 # KanZen sync Worker
 
-A tiny Cloudflare Worker that lets two or more KanZen installs sync boards through your own Cloudflare account. **You** deploy it, **you** own the data, **you** hold the encryption passphrase. KanZen the project never deploys or hosts anything on your behalf.
+This optional Worker lets KanZen installations sync encrypted boards through a Cloudflare account you control. KanZen never deploys it for you, and the board passphrase never leaves the browser.
 
-The Worker stores ciphertext only — your sync passphrase never leaves the browser, so even with full Worker access nobody can read your boards.
+The Worker uses one SQLite-backed Durable Object as the coordination boundary for one KanZen workspace. Updates carry monotonically increasing revisions and require `If-Match`, so two clients cannot silently overwrite the same remote revision.
 
-## What you need
+## Deploy
 
-- A Cloudflare account (free tier is fine)
-- [Wrangler](https://developers.cloudflare.com/workers/wrangler/install-and-update/) installed locally: `npm install -g wrangler`
-- One terminal
-
-## Deploy in three minutes
+Review Cloudflare's current Workers and Durable Objects pricing before deployment. Then, from this directory:
 
 ```bash
-# 1. From this directory:
-cd worker
-
-# 2. Log in to Cloudflare (browser will open):
-wrangler login
-
-# 3. Create a KV namespace and copy the id Wrangler prints:
-wrangler kv namespace create KANZEN_KV
-# → it prints something like:  id = "abcdef0123456789..."
-
-# 4. Open wrangler.toml and paste that id in place of REPLACE_ME.
-
-# 5. (Recommended) Set an access token so randos can't write to your sync:
-wrangler secret put SYNC_TOKEN
-# Wrangler will prompt — pick a long random string. Paste, hit return.
-
-# 6. Deploy:
-wrangler deploy
+npm install
+npx wrangler login
+npx wrangler secret put SYNC_TOKEN
+npx wrangler deploy
 ```
 
-Wrangler prints a URL like `https://kanzen-sync.YOURNAME.workers.dev`. Note it down.
+`SYNC_TOKEN` is mandatory. Choose a long random value and give it only to the people/devices that should access this workspace. The deploy creates the `KanZenWorkspace` SQLite Durable Object declared in `wrangler.jsonc`; there is no separate KV namespace to provision.
 
-## Hook up KanZen
+Wrangler prints a URL such as `https://kanzen-sync.YOURNAME.workers.dev`.
 
-Open KanZen → 👤 Preferences → **Cloud Sync** section:
+## Connect KanZen
 
-| Field            | Value                                              |
-|------------------|----------------------------------------------------|
-| Worker URL       | `https://kanzen-sync.YOURNAME.workers.dev`         |
-| Sync Token       | The string you set in step 5 (or empty if you skipped) |
-| Sync Passphrase  | Any phrase you can remember. **Critical:** this is the AES-GCM key. KanZen never sends it to the Worker. If you forget it, your synced boards are unrecoverable. |
+Open KanZen → Preferences → Cloud sync and enter:
 
-Click **Save** → KanZen pings `/list`. A green cloud icon in the header means you're connected.
+| Field | Value |
+| --- | --- |
+| Worker URL | The URL printed by Wrangler |
+| Sync Token | The `SYNC_TOKEN` secret value |
+| Sync Passphrase | A strong phrase shared by every device that must decrypt the boards |
 
-Per board: open Settings → toggle **Sync this board**. Only sync-enabled boards are pushed.
+Click **Save sync config**. The connection check should say `Connected · revision-safe`. Enable **Sync this board** in a board's settings. Other devices using the same Worker URL, token, and passphrase discover enabled boards during the next pull.
 
-## Repeat on every device
+If you lose the sync passphrase, the ciphertext cannot be recovered. It is intentionally never sent to Cloudflare.
 
-Same Worker URL, same sync token, same passphrase. KanZen on the second device will pull the board list and show the synced boards with a "cloud" badge — click Download on each one.
+## Conflict behavior
 
-## Conflict resolution
+- A write based on the current remote revision creates the next revision.
+- A stale write receives HTTP `409` and cannot overwrite the newer board.
+- KanZen downloads the newer revision and asks which copy to keep when local edits are pending or another user made the edit.
+- The version being replaced is snapshotted before either choice is committed.
 
-KanZen uses `localUser` (your name in Preferences) as a soft identity:
+## Privacy boundary
 
-- **Same `localUser` on both devices** → tier 1: auto-resolves with a snapshot of the loser before swap. ("Synced — updated from your other device.")
-- **Different `localUser`** → tier 3: shows a "<name> edited this 10 minutes ago" prompt with **Keep theirs / Keep mine / View diff**. The version you replace is auto-snapshotted first.
+The Worker stores:
 
-If two team members happen to use the same `localUser`, the first case fires. That's an acceptable edge case — names are an identity hint, not a security boundary.
+- encrypted/compressed board payloads;
+- revision numbers;
+- plaintext routing metadata: board name, editor name, edit time, device ID, and encryption flag.
 
-## Costs
+The metadata is not board content, but it is not opaque. Anyone with Cloudflare account access can see it. The `SYNC_TOKEN` controls API access; the separate sync passphrase controls board decryption.
 
-A KV write is 1c per million. A KV read is 0.5c per million. Free tier covers 100k reads + 1k writes per day. A small team that syncs every 30 seconds will do ~3000 writes per device per day. Comfortably under the free quota for most teams; pennies if you blow past it.
+## API
 
-## Privacy guarantees
-
-The Worker only ever sees:
-- Encrypted ciphertext (`board:<id>`)
-- Opaque metadata (`X-Board-Meta`) containing `lastModifiedBy`, `lastModifiedAt`, `deviceId`, `boardName`, `encrypted` flag
-
-If you set `SYNC_TOKEN` to a random secret, only people with that token can read or write. Combined with the per-board passphrase, even a compromised Worker reveals no plaintext.
-
-## Endpoints
-
-```
-GET    /list             → { boards: [ { id, meta } ] }
-GET    /board/:id        → ciphertext (text/plain), meta in X-Board-Meta header
-PUT    /board/:id        → store ciphertext, meta in X-Board-Meta
-DELETE /board/:id        → remove
+```text
+GET    /list
+GET    /board/:id
+PUT    /board/:id      (requires If-Match: "<revision>")
+DELETE /board/:id      (requires If-Match: "<revision>")
 ```
 
-All require `X-Sync-Token: <value>` if `SYNC_TOKEN` is set in env.
+Every request except CORS preflight requires `X-Sync-Token`. Board responses expose `X-Board-Revision`, `X-Board-Meta`, and an ETag. Payloads above 5 MiB are rejected.
 
 ## Maintenance
 
 ```bash
-# View KV contents (encrypted; just for sanity)
-wrangler kv key list --binding KANZEN_KV
-
-# Tail live logs
-wrangler tail
-
-# Re-deploy after editing the worker
-wrangler deploy
+npm run check
+npx wrangler tail
+npx wrangler deploy
 ```
 
-## Uninstall
-
-```bash
-wrangler delete                              # removes the Worker
-wrangler kv namespace delete --binding KANZEN_KV   # removes the KV store
-```
-
-In KanZen, clear the Worker URL field in Preferences and your boards revert to local-only.
+To stop using Cloud sync, clear the Worker URL in KanZen. Treat Worker deletion and Durable Object lifecycle changes as data-destructive operations; follow the current Cloudflare Durable Object class lifecycle documentation before removing the deployment.

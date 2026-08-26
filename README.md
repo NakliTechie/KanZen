@@ -39,9 +39,9 @@ Boards live on your device — as plain `.kanzen.json` files in a folder you cho
 - File System Access API as the source of truth — pretty-printed, sorted-key JSON for clean git diffs
 - Stable filenames that survive board renames (no orphaned files on disk)
 - Folder handle persisted between sessions where the browser allows it (Chrome)
-- 5-second polling for external edits — if you sync via git/Dropbox/iCloud, the other device's changes appear as a "Board updated from disk" toast
+- 5-second polling for external edits, including team-mode card directories — if you sync via git/Dropbox/iCloud, the other device's changes appear without a reload
 - **Team mode** (per-board toggle): splits a board into `_board.json` + `cards/<id>.json` + `_activity.jsonl` so each card edit touches only that one file. Two people editing different cards never produce a merge conflict. Lossless toggle in both directions.
-- **Cloud sync** (optional, BYO Cloudflare Worker): deploy a [3-minute Worker](worker/README.md) in your own Cloudflare account, set a passphrase in Preferences, and KanZen syncs boards across devices via your own infrastructure. AES-GCM 256 encrypted client-side — the Worker only ever sees ciphertext. Tier-1 conflict resolution (same user, different device) is automatic; tier-3 (different user) prompts. Pre-conflict snapshots are taken before any overwrite.
+- **Cloud sync** (optional, BYO Cloudflare Worker): deploy the [sync Worker](worker/README.md) in your own Cloudflare account, set a passphrase in Preferences, and KanZen syncs boards across devices via your own infrastructure. AES-GCM 256 encryption happens client-side. Revision checks reject stale writes; pending local edits and edits from another user prompt before overwrite, with snapshots of the displaced version.
 - IndexedDB fallback when no folder is connected; "Browser storage only" pill nudges you to wire up a folder
 - Inside NakliOS, explicitly switch between this browser, the mounted Folder,
   and encrypted Crate. Each is a separate board library; switching never
@@ -89,7 +89,7 @@ The File System Access API requires HTTPS or `localhost`. IndexedDB fallback wor
 
 ## Privacy
 
-Nothing leaves your machine. There is no server. The author cannot see your boards. Even share URLs encode the board into the hash fragment, which is never sent to any server — not even to Cloudflare Pages, where this site is hosted.
+By default, nothing leaves your machine and the author cannot see your boards. Share URLs encode the board into the hash fragment, which is never sent to the hosting server. If you explicitly configure the optional BYO Cloud Sync Worker, encrypted board payloads plus the metadata documented in [the Worker guide](worker/README.md#privacy-boundary) are sent to that Worker.
 
 ## Author
 

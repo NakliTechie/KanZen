@@ -15,7 +15,7 @@
 </head>
 <body>
 <header>
-  <button id="run" type="button">Run Folder → Crate regression</button>
+  <button id="run" type="button">Run storage + live-update + import-safety regression</button>
   <span id="status" role="status">Ready</span>
 </header>
 <iframe id="app" title="KanZen test app" src="../index.html"></iframe>
@@ -31,17 +31,33 @@
     columns:[{id:id+'-todo',name:'To do',cardIds:[],wipLimit:null}],
     cards:{},activity:[],
   },null,2);
+  const teamBoard=JSON.stringify({
+    _meta:{boardId:'crate-board',lastModified:stamp,kanzenVersion:1,teamMode:true},
+    id:'crate-board',name:'Crate Board',createdAt:stamp,members:[],labels:[],
+    columns:[{id:'crate-todo',name:'To do',cardIds:['crate-card','crate-card-2'],wipLimit:0,collapsed:false}],
+  },null,2);
+  const teamCard=(id,title)=>JSON.stringify({
+    id,title,description:'',labelIds:[],memberIds:[],priority:'none',dueDate:null,
+    checklist:[],attachments:[],comments:[],createdBy:'Harness',createdAt:stamp,
+    lastModifiedBy:'Harness',lastModifiedAt:stamp,updatedAt:stamp,
+  },null,2);
   const stores={
     fsa:new Map([
       ['boards/folder-board.kanzen.json',board('folder-board','Folder Board')],
       ['kanzen-settings.json',JSON.stringify({theme:'light',lastBoardId:'folder-board',version:1})],
     ]),
     crate:new Map([
-      ['boards/crate-board.kanzen.json',board('crate-board','Crate Board')],
+      ['boards/crate-team/',''],
+      ['boards/crate-team/_board.json',teamBoard],
+      ['boards/crate-team/cards/crate-card.json',teamCard('crate-card','Initial team card')],
+      ['boards/crate-team/cards/crate-card-2.json',teamCard('crate-card-2','Second team card')],
+      ['boards/crate-team/_activity.jsonl',''],
       ['kanzen-settings.json',JSON.stringify({theme:'light',lastBoardId:'crate-board',version:1})],
     ]),
   };
   let active='fsa';
+  let subscriptionCounter=0;
+  const subscriptions=new Map();
   const caps=()=>({
     type:'naklios:capabilities',fs:true,fsBackend:active,
     fsBackends:[
@@ -50,6 +66,14 @@
     ],
   });
   const send=message=>frame.contentWindow.postMessage(message,'*');
+  const emitExternal=(backend,path)=>{
+    for(const [subscriptionId,sub] of subscriptions){
+      if(sub.backend!==backend) continue;
+      const prefix=String(sub.path||'').replace(/\/+$/,'');
+      if(prefix&&path!==prefix&&!path.startsWith(prefix+'/')) continue;
+      send({type:'naklios:fs:event',subscriptionId,event:{op:'update',backend,path,source:'harness-external'}});
+    }
+  };
   const waitFor=(check,label,timeout=12000)=>new Promise((resolve,reject)=>{
     const started=performance.now();
     const poll=()=>{
@@ -73,6 +97,10 @@
     }
     if(!String(msg.type||'').startsWith('naklios:fs:')) return;
     const op=msg.type.slice('naklios:fs:'.length);
+    if(op==='unsubscribe'){
+      subscriptions.delete(msg.subscriptionId);
+      return;
+    }
     const reply={type:'naklios:fs:reply',requestId:msg.requestId};
     try{
       if(op==='selectBackend'){
@@ -82,7 +110,11 @@
         send(caps());
       }else{
         const store=stores[active];
-        if(op==='list') reply.result=[...store.keys()].filter(path=>path.startsWith(String(msg.prefix||'')));
+        if(op==='subscribe'){
+          const id='sub-'+(++subscriptionCounter);
+          subscriptions.set(id,{backend:msg.backend||active,path:msg.path||''});
+          reply.result=id;
+        }else if(op==='list') reply.result=[...store.keys()].filter(path=>path.startsWith(String(msg.prefix||'')));
         else if(op==='exists') reply.result=store.has(msg.path);
         else if(op==='read'){
           if(!store.has(msg.path)) throw new Error('Not found');
@@ -118,7 +150,50 @@
       if(app.body.textContent.includes('Folder Board')) throw new Error('Folder board leaked into Crate view');
       if(stores.crate.has('boards/folder-board.kanzen.json')) throw new Error('Folder board was copied to Crate');
       if(!stores.fsa.has('boards/folder-board.kanzen.json')) throw new Error('Folder board was removed');
-      setStatus('PASS · Folder and Crate stayed separate while the live board library switched','pass');
+
+      setStatus('Running · checking live team-card propagation…');
+      await waitFor(
+        ()=>[...subscriptions.values()].some(sub=>sub.backend==='crate'&&sub.path==='boards'),
+        'Crate live subscription',
+      );
+      stores.crate.set('boards/crate-team/cards/crate-card.json',teamCard('crate-card','Live team update arrived'));
+      emitExternal('crate','boards/crate-team/cards/crate-card.json');
+      await waitFor(()=>app.body.textContent.includes('Live team update arrived'),'live team card update');
+
+      setStatus('Running · checking non-overlapping team edits merge…');
+      const liveWindow=frame.contentWindow;
+      const liveBoard=liveWindow.S.boards[liveWindow.S.currentBoardId];
+      liveBoard.cards['crate-card'].title='Local pending team edit';
+      liveBoard.cards['crate-card'].updatedAt=new Date().toISOString();
+      liveBoard._dirtyCards=new Set(['crate-card']);
+      liveWindow.S.dirty=true;
+      stores.crate.set('boards/crate-team/cards/crate-card-2.json',teamCard('crate-card-2','Remote second-card edit'));
+      emitExternal('crate','boards/crate-team/cards/crate-card-2.json');
+      await waitFor(
+        ()=>app.body.textContent.includes('Local pending team edit')&&app.body.textContent.includes('Remote second-card edit'),
+        'non-overlapping team merge',
+      );
+      if(app.getElementById('kz-overlay').classList.contains('open')) throw new Error('Non-overlapping team edits prompted as a conflict');
+
+      setStatus('Running · checking crafted import IDs cannot execute…');
+      const appWindow=frame.contentWindow;
+      const current=appWindow.S.boards[appWindow.S.currentBoardId];
+      const maliciousId="x');document.body.dataset.kanzenProbe='triggered';//";
+      current.columns.push({id:maliciousId,name:'Crafted column',cardIds:[],wipLimit:0,collapsed:false});
+      const validation=appWindow.validateBoardPayload(current);
+      if(validation.ok) throw new Error('Crafted column ID passed import validation');
+      delete app.body.dataset.kanzenProbe;
+      appWindow.renderAll();
+      const craftedColumn=[...app.querySelectorAll('.column')].find(column=>column.dataset.columnId===maliciousId);
+      if(!craftedColumn) throw new Error('Crafted column did not render for execution regression');
+      craftedColumn.querySelector('.add-card-btn').click();
+      await new Promise(resolve=>setTimeout(resolve,50));
+      if(app.body.dataset.kanzenProbe==='triggered') throw new Error('Crafted column ID executed JavaScript');
+      app.getElementById('kz-cancel').click();
+      current.columns=current.columns.filter(column=>column.id!==maliciousId);
+      appWindow.renderAll();
+
+      setStatus('PASS · storage isolation, team live updates, and crafted-ID execution checks passed','pass');
     }catch(error){
       console.error(error);
       setStatus('FAIL · '+error.message,'fail');
