@@ -1886,14 +1886,17 @@
   if(window.naklios) return;
   let hosted=false;
   try{ hosted=!!(window.parent&&window.parent!==window); }catch(_){}
+  let naklFlag=false;
+  try{ naklFlag=new URLSearchParams(location.search).has('naklios'); }catch(_){}
+  let trustedParentOrigin=null; // learned on first naklios:* message (no-referrer-safe)
   let theme=null, beforeCloseCb=null, rpcCounter=0;
   const themeListeners=new Set(), capabilityListeners=new Set(), pending=new Map();
   const fsSubscriptions=new Map();
   const aiRequests=new Map();
-  const capabilities={hosted,version:1,fs:false,fsBackends:[],fsBackend:null,ai:false,aiModelLabel:null};
+  const capabilities={hosted:hosted||naklFlag,flagged:naklFlag,version:1,fs:false,fsBackends:[],fsBackend:null,ai:false,aiModelLabel:null};
   function send(type,data){
     if(!hosted) return;
-    try{ window.parent.postMessage(Object.assign({type},data||{}),'*'); }catch(_){}
+    try{ window.parent.postMessage(Object.assign({type},data||{}),trustedParentOrigin||'*'); }catch(_){}
   }
   function rpc(type,payload){
     if(!hosted) return Promise.reject(new Error('Not hosted — naklios.* unavailable standalone'));
@@ -1939,6 +1942,7 @@
     if(hosted&&event.source!==window.parent) return;
     const msg=event.data;
     if(!msg||typeof msg!=='object') return;
+    if(hosted&&typeof msg.type==='string'&&msg.type.indexOf('naklios:')===0){ if(!trustedParentOrigin) trustedParentOrigin=event.origin; else if(event.origin!==trustedParentOrigin) return; }
     if(msg.type==='naklios:theme'){
       theme={id:msg.theme,colors:msg.colors,mood:msg.mood};
       themeListeners.forEach(cb=>{ try{ cb(theme); }catch(_){} });
