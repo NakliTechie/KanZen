@@ -1,0 +1,24 @@
+name: Test
+
+# The app's own lanes. Until 2026-09-24 only vendor-sdk.yml ran here, and the storage lane sat red
+# from the SDK adoption until the durability change noticed it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: test-naklios-storage.mjs
+        run: node scripts/test-naklios-storage.mjs
+      - name: test-team-merge.mjs
+        run: node scripts/test-team-merge.mjs

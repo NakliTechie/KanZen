@@ -66,5 +66,6 @@ assert.match(appCode,/if\(S\._dirtyGen === gen\)\{ S\.dirty = false;/,'an edit m
 assert.match(appCode,/syncSaver\(\)\.markDirty\(\)/,'sync pushes ride the SDK timing');
 assert.match(appCode,/delay: SYNC_PUSH_DEBOUNCE_MS,\s*guard: false,/,'a sync push never holds a close');
 assert.doesNotMatch(appCode,/setInterval\(\(\) => \{ if\(S\.dirty\) flushSave\(\); \}/,'no hand-rolled periodic save tick');
+assert.match(appCode,/keepalive: document\.visibilityState==='hidden' && payloadBytes<=SYNC_KEEPALIVE_MAX_BYTES,/,'a push started as the page hides outlives it, within the keepalive body cap');
 
 console.log('KanZen storage, import-safety, and sync contracts: ok');
