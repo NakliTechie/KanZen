@@ -12,9 +12,10 @@ const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
 
 assert.equal(scripts.length,1,'KanZen remains a single-file app with one script');
 new vm.Script(scripts[0][1],{filename:'index.html'});
-assert.match(html,/function installNakliOSSdk\(/,'NakliOS SDK is vendored inline');
-assert.match(html,/useBackend:backend=>rpc\('naklios:fs:selectBackend'/,'SDK exposes explicit backend selection');
-assert.match(html,/subscribe:async\(path,cb\)=>/,'SDK exposes hosted filesystem subscriptions');
+assert.match(html,/\/\* naklios-sdk:begin ver=\d+ sha256=[0-9a-f]{64}/,'the canonical NakliOS SDK is vendored inline through the marker splice');
+assert.match(html,/useBackend: function \(backend\)\s*\{ return rpc\('naklios:fs:selectBackend'/,'SDK exposes explicit backend selection');
+assert.match(html,/subscribe: async function \(path, cb\)/,'SDK exposes hosted filesystem subscriptions');
+assert.match(html,/experimental_autosave: function \(opts\)/,'the vendored SDK carries the autosave primitive');
 assert.match(html,/refreshNakliOSLibraryFromStorage/,'hosted storage events reload the selected library');
 assert.match(html,/const StorageNakliOS = \{/,'hosted Folder and Crate share a path adapter');
 assert.match(html,/if\(S\.storageMode==='naklios'\) return StorageNakliOS\.saveBoard\(b\)/,
@@ -31,9 +32,9 @@ assert.match(html,/S\.storageMode === 'fs' \|\| S\.storageMode === 'naklios'/,
   'team-mode file layout works through both direct and hosted adapters');
 assert.match(html,/S\.storageMode !== 'fs' && S\.storageMode !== 'naklios'/,
   'team-mode toggle accepts hosted Folder and Crate');
-assert.match(html,/debouncedSave\.cancel\(\)/,
+assert.match(html,/save: async \(\) => \{ if\(S\.dirty && !\(await flushSave\(\)\)\)/,
   'host-side rebind cancels a delayed old-library save');
-assert.match(html,/Object\.assign\(\{backend:capabilities\.fsBackend\},data\)/,
+assert.match(html,/Object\.assign\(\{ backend: capabilities\.fsBackend \}, data \|\| \{\}\)/,
   'filesystem operations carry backend affinity for host-side race rejection');
 assert.match(html,/async function teamDirectorySignature/,
   'standalone polling fingerprints team-mode card directories');
@@ -54,5 +55,16 @@ assert.match(worker,/'Cache-Control': 'no-store'/,
 assert.equal(workerConfig.durable_objects.bindings[0].name,'KANZEN_WORKSPACE');
 assert.equal(workerConfig.exports.KanZenWorkspace.storage,'sqlite');
 assert.deepEqual(workerConfig.secrets.required,['SYNC_TOKEN']);
+
+// DUR (2026-09-24): the SDK owns save timing. beforeunload cannot await, so app code (outside the
+// vendored SDK block) must not try to save there, and both saves ride the SDK's autosave.
+const appCode=html.replace(/\/\* naklios-sdk:begin[\s\S]*?naklios-sdk:end \*\//,'');
+assert.notEqual(appCode,html,'the vendored SDK block was found and stripped');
+assert.doesNotMatch(appCode,/addEventListener\(\s*['"]beforeunload['"]|onbeforeunload/,'no app-level beforeunload handler (a save there cannot complete)');
+assert.match(appCode,/function markDirty\(\)\{[\s\S]*?boardSaver\(\)\.markDirty\(\);/,'every edit reaches the board autosave');
+assert.match(appCode,/if\(S\._dirtyGen === gen\)\{ S\.dirty = false;/,'an edit made during a save keeps the board dirty');
+assert.match(appCode,/syncSaver\(\)\.markDirty\(\)/,'sync pushes ride the SDK timing');
+assert.match(appCode,/delay: SYNC_PUSH_DEBOUNCE_MS,\s*guard: false,/,'a sync push never holds a close');
+assert.doesNotMatch(appCode,/setInterval\(\(\) => \{ if\(S\.dirty\) flushSave\(\); \}/,'no hand-rolled periodic save tick');
 
 console.log('KanZen storage, import-safety, and sync contracts: ok');
