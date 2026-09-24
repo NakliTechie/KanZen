@@ -15,7 +15,7 @@ new vm.Script(scripts[0][1],{filename:'index.html'});
 assert.match(html,/\/\* naklios-sdk:begin ver=\d+ sha256=[0-9a-f]{64}/,'the canonical NakliOS SDK is vendored inline through the marker splice');
 assert.match(html,/useBackend: function \(backend\)\s*\{ return rpc\('naklios:fs:selectBackend'/,'SDK exposes explicit backend selection');
 assert.match(html,/subscribe: async function \(path, cb\)/,'SDK exposes hosted filesystem subscriptions');
-assert.match(html,/experimental_autosave: function \(opts\)/,'the vendored SDK carries the autosave primitive');
+assert.match(html,/autosave: function \(opts\)/,'the vendored SDK carries the autosave primitive');
 assert.match(html,/refreshNakliOSLibraryFromStorage/,'hosted storage events reload the selected library');
 assert.match(html,/const StorageNakliOS = \{/,'hosted Folder and Crate share a path adapter');
 assert.match(html,/if\(S\.storageMode==='naklios'\) return StorageNakliOS\.saveBoard\(b\)/,
