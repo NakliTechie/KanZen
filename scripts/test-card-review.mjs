@@ -3,6 +3,33 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+// Exercise the actual vendored SDK before testing the app's native reducer.
+// A refresh from an older production SDK must not silently remove the review
+// capability while the app's reducer fixture still passes with a stubbed SDK.
+const sdkMatch = html.match(/\/\* naklios-sdk:begin[^*]*\*\/([\s\S]*?)\/\* naklios-sdk:end \*\//);
+assert.ok(sdkMatch, 'the shipped app contains a marked SDK region');
+const messages = [];
+let sdkListener;
+const parent = { postMessage(message) { messages.push(message); } };
+const window = {
+  parent,
+  location: { search: '' },
+  addEventListener(type, callback) { if (type === 'message') sdkListener = callback; },
+};
+vm.runInNewContext(sdkMatch[1], { window, document: {}, URLSearchParams, Set, Map, Promise,
+  Object, Error, Date, setTimeout: () => 0, clearTimeout: () => {} });
+assert.equal(typeof window.naklios.review?.stage, 'function', 'vendored SDK exposes native review staging');
+assert.equal(typeof window.naklios.review?.onDecision, 'function', 'vendored SDK exposes review decisions');
+const fromHost = data => sdkListener({ data, source: parent, origin: 'https://naklios.dev' });
+fromHost({ type: 'naklios:capabilities', review: true });
+assert.equal(window.naklios.capabilities.review, true, 'the actual SDK receives the host review capability');
+const sdkStage = window.naklios.review.stage('kanzen.card-move', { cardId: 'sdk-probe' });
+const request = messages.at(-1);
+assert.equal(request.type, 'naklios:review:stage', 'the actual SDK sends the staging RPC');
+assert.equal(request.tool, 'kanzen.card-move');
+fromHost({ type: 'naklios:review:reply', requestId: request.requestId, result: { proposal_id: 'sdk-probe' } });
+assert.equal((await sdkStage).proposal_id, 'sdk-probe', 'the staging reply reaches the app');
+
 function extractFunction(name) {
   const start = html.indexOf(`function ${name}(`);
   assert.notEqual(start, -1, `${name} exists in the shipped app`);

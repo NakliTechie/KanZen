@@ -46,6 +46,10 @@ jobs:
         # already matches canonical — i.e. the splice above did what it claims.
         # A splice that cannot be confirmed fails the run instead of being pushed.
         run: node scripts/vendor-naklios-sdk.mjs --file index.html --check
+      - name: Verify the app review contract before committing it
+        # The app may adopt a host capability before the production canonical
+        # SDK reaches it. Refuse a refresh that removes a required bridge.
+        run: node scripts/test-card-review.mjs
       - name: Commit the refreshed SDK
         id: commit
         run: |
