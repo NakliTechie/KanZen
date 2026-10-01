@@ -46,6 +46,8 @@ Boards live on your device — as plain `.kanzen.json` files in a folder you cho
 - Inside NakliOS, explicitly switch between this browser, the mounted Folder,
   and encrypted Crate. Each is a separate board library; switching never
   copies, merges, or deletes boards.
+- Inside NakliOS, card moves stage a before/after location for host review.
+  Commit moves the card once; discard and stale-board rejection leave it in place.
 - Auto-save every 5 s on changes; immediate save on destructive actions
 - Per-board and full-state JSON export / import (merge or replace)
 - CSV and Markdown export

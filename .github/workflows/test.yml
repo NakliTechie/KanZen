@@ -23,3 +23,5 @@ jobs:
         run: node scripts/test-naklios-storage.mjs
       - name: test-team-merge.mjs
         run: node scripts/test-team-merge.mjs
+      - name: test-card-review.mjs
+        run: node scripts/test-card-review.mjs
