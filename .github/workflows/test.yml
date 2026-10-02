@@ -27,13 +27,15 @@ jobs:
         run: node scripts/test-card-review.mjs
       # Agent face: the parity lint (manifest covers the command bus) and its self-test, then the
       # browser suite that drives every door. Test tooling only; index.html ships with no dependencies.
-      - name: npm ci
+      - name: npm ci (test tooling in scripts/)
         run: npm ci
+        working-directory: scripts
       - name: lint-agent-face.mjs
         run: node scripts/lint-agent-face.mjs
       - name: test-lint-agent-face.mjs
         run: node scripts/test-lint-agent-face.mjs
       - name: Chromium for Playwright
         run: npx playwright install --with-deps --only-shell chromium
+        working-directory: scripts
       - name: test-agent-face.mjs
         run: node scripts/test-agent-face.mjs

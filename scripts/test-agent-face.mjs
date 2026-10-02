@@ -1,7 +1,7 @@
 // End-to-end test of the agent face in headless Chromium. It drives KanZen through its doors
 // (window.kanzen, a stand-in for WebMCP's document.modelContext, the cross-tab channel) and does
 // the person's part (approve, reject, open the channel) through the real UI.
-//   node scripts/test-agent-face.mjs        (needs `npm ci` and `npx playwright install chromium`)
+//   node scripts/test-agent-face.mjs   (first, in scripts/: `npm ci` and `npx playwright install --only-shell chromium`)
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';

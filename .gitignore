@@ -3,8 +3,6 @@
 !README.md
 !LICENSE
 !.gitignore
-!package.json
-!package-lock.json
 !worker.js
 !worker/
 !worker/wrangler.jsonc
@@ -16,6 +14,7 @@
 !worker/README.md
 !scripts/
 !scripts/**
+scripts/node_modules/
 !.github/
 !.github/**
 !test/
