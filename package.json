@@ -1,0 +1,14 @@
+{
+  "name": "kanzen-tooling",
+  "private": true,
+  "description": "Test tooling only. The shipped product (index.html) has no build step and no npm dependencies.",
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/test-naklios-storage.mjs && node scripts/test-team-merge.mjs && node scripts/test-card-review.mjs && node scripts/lint-agent-face.mjs && node scripts/test-agent-face.mjs"
+  },
+  "devDependencies": {
+    "acorn": "8.15.0",
+    "acorn-walk": "8.3.4",
+    "playwright": "1.62.1"
+  }
+}
