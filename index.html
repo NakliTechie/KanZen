@@ -1376,6 +1376,7 @@
   .proposal-note { font-style: italic; }
   .proposal-foot { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
   .proposal-meta { flex: 1; min-width: 160px; font-size: 11px; color: var(--text-faint); }
+  .proposal-elsewhere { font-size: 12px; color: var(--text-mute); font-style: italic; }
   .agent-log-row { display: flex; gap: 8px; align-items: baseline; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
   .agent-log-row:last-child { border-bottom: none; }
   .agent-log-row code { font-size: 11px; }
@@ -6817,6 +6818,9 @@ async function stageCardMove(cardId, toColId, toIndex=null){
   }catch(error){ toast('Could not stage card move: '+String(error?.message||error)); }
 }
 naklios.review?.onDecision?.(({type,proposal_id})=>{
+  // Agent proposals staged with NakliOS (see kzHostDecision); undefined when not one of them.
+  const agentDecision = typeof kzHostDecision === 'function' ? kzHostDecision(type, proposal_id) : undefined;
+  if(agentDecision !== undefined) return agentDecision;
   const pending = pendingCardMoves.get(proposal_id);
   if(!pending) throw new Error('KanZen has no pending card move for this proposal');
   if(type==='discard'){
@@ -7664,6 +7668,7 @@ function cmdWithdrawProposal(input){
   const p = KZ_AGENT.proposals.get(input.proposal_id);
   if(!p) throw kzError('not_found', `Proposal ${input.proposal_id} not found`);
   if(p.status !== 'pending') throw kzError('not_pending', `Proposal ${p.id} is already ${p.status}`);
+  KZ_AGENT.hostQueue = KZ_AGENT.hostQueue.filter(id => id !== p.id);
   kzDecide(p, 'withdrawn');
   return kzProposalView(p);
 }
@@ -8642,6 +8647,10 @@ const KZ_AGENT = {
   modelContextAbort: null,
   modelContextTools: [],
   applying: Promise.resolve(),
+  hostQueue: [],             // proposal ids waiting their turn in NakliOS review
+  hostActive: null,          // {localId, hostId} of the one proposal NakliOS holds
+  hostStaging: false,
+  hostUnsupported: false,    // the host refused kanzen.agent; use KanZen's own dialog
 };
 const KZ_MAX_PENDING = 200;
 const KZ_MAX_CALLS = 200;
@@ -8660,7 +8669,7 @@ function kzManifest(){
       window: 'window.kanzen',
       channel: KZ_AGENT.channel ? `BroadcastChannel("${KZ_CHANNEL_NAME}")` : 'closed; the person can open it in Preferences',
     },
-    approval: 'read tools answer at once; session tools change only what this tab shows; write and destructive tools return {status:"pending_approval", proposal_id} and apply only after the person approves the proposal in KanZen. Poll get_proposal for the outcome.',
+    approval: 'read tools answer at once; session tools change only what this tab shows; write and destructive tools return {status:"pending_approval", proposal_id} and apply only after the person approves the proposal, in KanZen or, when KanZen runs inside NakliOS, in NakliOS review. Poll get_proposal for the outcome.',
     tools: KZ_TOOLS.filter(t => t.kind !== 'person').map(t => ({
       name: t.name, title: t.title, kind: t.kind, staged: kzStaged(t), batchable: !!t.batch,
       description: t.description, input_schema: t.inputSchema,
@@ -8760,8 +8769,80 @@ async function kzStage(tool, input, ctx){
   KZ_AGENT.proposals.set(p.id, p);
   kzPruneProposals();
   kzEmit('proposal', kzProposalView(p));
-  toast(`Agent proposal waiting: ${p.summary.slice(0, 80)}`);
+  if(kzHostReviewAvailable()){
+    p.route = 'host-queued';
+    KZ_AGENT.hostQueue.push(p.id);
+    kzPumpHostReview();
+  }else{
+    toast(`Agent proposal waiting: ${p.summary.slice(0, 80)}`);
+  }
   return p;
+}
+
+/* ---------- NakliOS review: when hosted, agent proposals wait in NakliOS's review queue ----------
+   The host takes one pending change per app frame, so proposals go one at a time; the rest wait
+   here as 'host-queued'. A host that does not know the kanzen.agent tool (NakliOS before B12)
+   refuses the first one, and from then on proposals use KanZen's own 🤖 dialog. */
+const KZ_HOST_TOOL = 'kanzen.agent';
+function kzHostReviewAvailable(){
+  return naklios.capabilities.review === true && !KZ_AGENT.hostUnsupported && typeof naklios.review?.stage === 'function';
+}
+async function kzPumpHostReview(){
+  if(KZ_AGENT.hostActive || KZ_AGENT.hostStaging) return;
+  const id = KZ_AGENT.hostQueue.shift();
+  if(!id) return;
+  const p = KZ_AGENT.proposals.get(id);
+  if(!p || p.status !== 'pending'){ kzPumpHostReview(); return; }
+  KZ_AGENT.hostStaging = true;
+  try{
+    const staged = await naklios.review.stage(KZ_HOST_TOOL, {
+      kind:'agent', boardId:p.board_id, boardName:p.board_name, tool:p.tool, title:p.title,
+      summary:p.summary, details:p.details, note:p.note, destructive:p.kind === 'destructive',
+      door:p.door, caller:p.caller, localId:p.id,
+    }, { reversible: p.kind !== 'destructive' });
+    p.route = 'host';
+    p.host_id = staged.proposal_id;
+    KZ_AGENT.hostActive = { localId: p.id, hostId: staged.proposal_id };
+  }catch(error){
+    const message = String(error?.message || error);
+    if(/discarded recently/.test(message)){
+      kzDecide(p, 'rejected', { error: { code:'discarded_recently', message:'You discarded this same change in NakliOS recently' } });
+    }else{
+      // An older host, or one that cannot render the change: keep it in KanZen's own dialog.
+      if(/does not match|no renderable|unavailable/.test(message)) KZ_AGENT.hostUnsupported = true;
+      p.route = 'local';
+      for(const queuedId of KZ_AGENT.hostQueue.splice(0)){
+        const queued = KZ_AGENT.proposals.get(queuedId);
+        if(queued) queued.route = 'local';
+      }
+      toast(`Agent proposal waiting: ${p.summary.slice(0, 80)}`);
+    }
+  }finally{
+    KZ_AGENT.hostStaging = false;
+    kzRenderAgentUi();
+  }
+  if(!KZ_AGENT.hostActive) kzPumpHostReview();
+}
+// NakliOS decided: commit applies the proposal through the same path as an in-app approval.
+// Returns undefined for a proposal this module did not stage, so card moves pass through.
+function kzHostDecision(type, hostId){
+  const active = KZ_AGENT.hostActive;
+  if(!active || active.hostId !== hostId) return undefined;
+  const p = KZ_AGENT.proposals.get(active.localId);
+  const settle = () => { KZ_AGENT.hostActive = null; kzPumpHostReview(); };
+  if(type === 'discard'){
+    if(p?.status === 'pending') kzDecide(p, 'rejected');
+    settle();
+    return { ok: true };
+  }
+  if(type !== 'commit') return undefined;
+  return (async () => {
+    try{
+      if(!p || p.status !== 'pending') return { ok: false, reason: `the agent ${p ? p.status : 'removed'} this proposal` };
+      await kzApplyProposals([p.id]);
+      return p.status === 'applied' ? { ok: true } : { ok: false, reason: p.error?.message || 'KanZen could not apply the change' };
+    }finally{ settle(); }
+  })();
 }
 function kzPruneProposals(){
   const decided = [...KZ_AGENT.proposals.values()].filter(p => p.status !== 'pending');
@@ -8772,6 +8853,7 @@ function kzProposalView(p){
     proposal_id: p.id, tool: p.tool, title: p.title, kind: p.kind, status: p.status,
     summary: p.summary, details: p.details, note: p.note,
     board_id: p.board_id, board_name: p.board_name, door: p.door, caller: p.caller,
+    review: kzHeldHere(p) ? 'kanzen' : 'naklios',
     created_at: p.created_at, decided_at: p.decided_at, result: p.result, error: p.error,
   };
 }
@@ -8783,6 +8865,7 @@ function kzDecide(p, status, fields={}){
 // Applies approved proposals one at a time, oldest first. A proposal applies to the board it
 // was staged against: KanZen opens that board first. Destructive changes take one safety
 // snapshot per board per approval.
+function kzHeldHere(p){ return !p.route || p.route === 'local'; }
 function kzApplyProposals(ids){
   const run = KZ_AGENT.applying.then(async () => {
     const snapshotted = new Set();
@@ -8819,12 +8902,13 @@ function kzApplyProposals(ids){
 }
 // Person-only acts: approving and rejecting proposals.
 async function approveProposal(id){
+  if(!kzHeldHere(KZ_AGENT.proposals.get(id) || {})) return;
   await kzApplyProposals([id]);
   const p = KZ_AGENT.proposals.get(id);
   if(p?.status === 'applied') toast(`Applied: ${p.summary.slice(0, 80)}`);
 }
 async function approveAllProposals(){
-  const ids = kzPending().map(p => p.id);
+  const ids = kzPending().filter(kzHeldHere).map(p => p.id);
   if(!ids.length) return;
   await kzApplyProposals(ids);
   const applied = ids.filter(id => KZ_AGENT.proposals.get(id)?.status === 'applied').length;
@@ -8832,10 +8916,10 @@ async function approveAllProposals(){
 }
 function rejectProposal(id){
   const p = KZ_AGENT.proposals.get(id);
-  if(p?.status === 'pending') kzDecide(p, 'rejected');
+  if(p?.status === 'pending' && kzHeldHere(p)) kzDecide(p, 'rejected');
 }
 function rejectAllProposals(){
-  for(const p of kzPending()) kzDecide(p, 'rejected');
+  for(const p of kzPending().filter(kzHeldHere)) kzDecide(p, 'rejected');
 }
 
 /* ---------- events ---------- */
@@ -9000,6 +9084,12 @@ function renderAgentModal(){
     }
     const foot = kzEl('div', 'proposal-foot');
     foot.appendChild(kzEl('span', 'proposal-meta', kzProposalMeta(p)));
+    if(!kzHeldHere(p)){
+      foot.appendChild(kzEl('span', 'proposal-elsewhere', p.route === 'host' ? 'Waiting in NakliOS review' : 'Next in NakliOS review'));
+      row.appendChild(foot);
+      list.appendChild(row);
+      continue;
+    }
     const reject = kzEl('button', 'btn-ghost', 'Reject');
     reject.onclick = () => rejectProposal(p.id);
     const approve = kzEl('button', p.kind === 'destructive' ? 'btn-danger' : 'btn-primary', 'Approve');
@@ -9031,8 +9121,9 @@ function renderAgentModal(){
     );
     calls.appendChild(row);
   }
-  $('agent-approve-all').disabled = !pending.length;
-  $('agent-reject-all').disabled = !pending.length;
+  const held = pending.filter(kzHeldHere).length;
+  $('agent-approve-all').disabled = !held;
+  $('agent-reject-all').disabled = !held;
 }
 function renderAgentPrefs(){
   $('prefs-agent-channel').checked = !!KZ_AGENT.channel;

@@ -327,6 +327,54 @@ try{
     assert.deepEqual(events, ['person:set_view', 'person:set_view']);
   });
 
+  await step('inside NakliOS, proposals wait in its review one at a time; an older host falls back', async () => {
+    await page.evaluate(() => {
+      window.__staged = [];
+      window.__stageMode = 'accept';
+      naklios.capabilities.review = true;
+      naklios.review.stage = async (tool, diff) => {
+        if(window.__stageMode === 'old') throw new Error('review tool does not match its app');
+        if(window.__stageMode === 'poisoned') throw new Error('this change was discarded recently');
+        window.__staged.push({ tool, diff });
+        return { proposal_id: 'host_' + window.__staged.length };
+      };
+    });
+    const first = await value('create_card', { column_id: todo, title: 'Reviewed in NakliOS' });
+    const second = await value('create_card', { column_id: todo, title: 'Discarded in NakliOS' });
+    let staged = await page.evaluate(() => window.__staged);
+    assert.equal(staged.length, 1, 'one pending change per app frame');
+    assert.equal(staged[0].tool, 'kanzen.agent');
+    assert.equal(staged[0].diff.kind, 'agent');
+    assert.match(staged[0].diff.summary, /Reviewed in NakliOS/);
+    assert.equal((await value('get_proposal', { proposal_id: first.proposal_id })).review, 'naklios');
+    await page.evaluate(id => approveProposal(id), first.proposal_id);
+    assert.equal((await value('get_proposal', { proposal_id: first.proposal_id })).status, 'pending', 'KanZen\'s own approve leaves NakliOS-held proposals alone');
+    await openAgentModal();
+    assert.equal(await page.locator('.proposal-row .btn-primary').count(), 0, 'no Approve buttons for NakliOS-held proposals');
+    assert.equal(await page.locator('.proposal-elsewhere').count(), 2);
+    await page.evaluate(() => closeModal());
+    assert.deepEqual(await page.evaluate(() => kzHostDecision('commit', 'host_1')), { ok: true });
+    assert.equal((await value('get_proposal', { proposal_id: first.proposal_id })).status, 'applied');
+    assert.ok((await value('search_cards', { query: 'Reviewed in NakliOS' })).total === 1);
+    staged = await page.evaluate(() => window.__staged);
+    assert.equal(staged.length, 2, 'the next proposal goes to NakliOS after a decision');
+    assert.equal(await page.evaluate(() => kzHostDecision('commit', 'host_unknown')), undefined, 'card moves and unknown ids pass through');
+    assert.deepEqual(await page.evaluate(() => kzHostDecision('discard', 'host_2')), { ok: true });
+    assert.equal((await value('get_proposal', { proposal_id: second.proposal_id })).status, 'rejected');
+    assert.equal((await value('search_cards', { query: 'Discarded in NakliOS' })).total, 0);
+    await page.evaluate(() => { window.__stageMode = 'poisoned'; });
+    const poisoned = await value('rename_board', { name: 'Same again' });
+    assert.equal((await value('get_proposal', { proposal_id: poisoned.proposal_id })).status, 'rejected');
+    await page.evaluate(() => { window.__stageMode = 'old'; });
+    const fallback = await value('rename_board', { name: 'Old host' });
+    const view = await value('get_proposal', { proposal_id: fallback.proposal_id });
+    assert.equal(view.review, 'kanzen', 'an older host leaves the proposal in KanZen\'s dialog');
+    await clickProposal(fallback.proposal_id, 'Approve');
+    assert.equal((await value('get_board')).name, 'Old host');
+    await page.evaluate(() => kzUi('rename_board', { name: 'Main board' }));
+    await page.evaluate(() => { naklios.capabilities.review = false; KZ_AGENT.hostUnsupported = false; });
+  });
+
   await step('approved changes persist across a reload; proposals do not', async () => {
     const staged = await value('add_comment', { card_id: cardId, text: 'Persist me' });
     await page.evaluate(id => approveProposal(id), staged.proposal_id);

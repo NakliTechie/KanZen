@@ -42,6 +42,7 @@ const INFRA = {
   kzActivateBoard: 'command helper: opens a board after saving the one being left',
   kzStoreImported: 'command helper: stores imported boards', kzHistoryStep: 'command helper: undo and redo',
   kzApplyProposals: 'applies proposals the person approved', kzDecide: 'records a proposal decision',
+  kzPumpHostReview: 'stages agent proposals with NakliOS review, one at a time', kzHostDecision: 'applies the person\'s NakliOS review decision',
   restoreBoardState: 'rebuilds a board from serialized state for commands',
   rebuildBoardOrder: 'derives the sorted board list from S.boards', boardSaver: 'autosave wiring', syncSaver: 'sync autosave wiring',
 };
