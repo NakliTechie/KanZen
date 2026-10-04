@@ -2,6 +2,10 @@
 !index.html
 !README.md
 !LICENSE
+!FEATURES.md
+!social.png
+!marketing/
+!marketing/**
 !.gitignore
 !worker.js
 !worker/

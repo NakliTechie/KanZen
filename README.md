@@ -1,98 +1,105 @@
-# KanZen
+<h1 align="center">KanZen</h1>
 
-**Kanban without the noise.** Single-HTML-file, local-first Trello alternative. Zero server, zero account, zero board limits.
+<p align="center">
+  <strong>Kanban boards as plain JSON files in a folder you choose —<br>
+  with every command also callable by an agent, and nothing applied without your approval.</strong>
+</p>
 
-> **Live: [kanzen.naklitechie.com](https://kanzen.naklitechie.com/)**
+<p align="center">
+  One HTML file. Any modern browser, desktop or phone. No account, no server, no telemetry.
+</p>
 
-Boards live on your device — as plain `.kanzen.json` files in a folder you choose. Period.
+<p align="center">
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-0079bf?style=flat-square"></a>
+  <img alt="one file" src="https://img.shields.io/badge/install-one%20html%20file-0079bf?style=flat-square">
+  <img alt="no account" src="https://img.shields.io/badge/account-none-0079bf?style=flat-square">
+  <img alt="WebMCP" src="https://img.shields.io/badge/agents-WebMCP-0079bf?style=flat-square">
+</p>
 
-> *Kanban + Zen (simplicity). Also 完全 (kanzen) — Japanese for "complete" or "perfect."*
+![A board with four columns: cards carry labels, priorities, due dates, checklists and members](marketing/hero.png)
 
-## What it is
-
-- One self-contained `index.html` — open the file, it works
-- File System Access API as the source of truth — each board is one human-readable JSON file
-- IndexedDB fallback for browsers without FS API, or before you grant folder permission
-- No build step, no dependencies, no telemetry, no account
-- Drop the folder in Dropbox / iCloud / Syncthing / git → multi-device for free
-
-## Features
-
-**Boards & cards**
-- Multiple boards with a switcher
-- Columns: create, rename, reorder by drag, delete, collapse, soft WIP limits
-- Cards: title, markdown description, due date, priority, labels, members, checklists, file attachments, comments
-- Drag-and-drop cards between and within columns
-- Per-board background (gradient / solid / custom colour)
-
-**Views**
-- Board (kanban), List (sortable table), Calendar (month grid with drag-to-set-due-date)
-- Global search and filters (label, priority, due bucket, member) — non-matching cards **dim** instead of hiding
-
-**History & sharing**
-- Snapshots: manual or auto (before destructive actions, optional daily). Compare any two snapshots — card-level diff (added / removed / modified)
-- Undo / redo (`Cmd/Ctrl+Z` and `Shift+Z`), 50-deep per board
-- Activity feed of every change
-- URL sharing: encrypted (AES-GCM 256, PBKDF2 200K) or plain, compressed via the browser-native `CompressionStream` API (no CDN dependency on modern browsers), with size gate and QR code. The hash fragment never leaves the browser. Read-back supports the spec `#e=` format too, so URLs from compatible tools can be imported.
-
-**Storage & interop**
-- File System Access API as the source of truth — pretty-printed, sorted-key JSON for clean git diffs
-- Stable filenames that survive board renames (no orphaned files on disk)
-- Folder handle persisted between sessions where the browser allows it (Chrome)
-- 5-second polling for external edits, including team-mode card directories — if you sync via git/Dropbox/iCloud, the other device's changes appear without a reload
-- **Team mode** (per-board toggle): splits a board into `_board.json` + `cards/<id>.json` + `_activity.jsonl` so each card edit touches only that one file. Two people editing different cards never produce a merge conflict. Lossless toggle in both directions.
-- **Cloud sync** (optional, BYO Cloudflare Worker): deploy the [sync Worker](worker/README.md) in your own Cloudflare account, set a passphrase in Preferences, and KanZen syncs boards across devices via your own infrastructure. AES-GCM 256 encryption happens client-side. Revision checks reject stale writes; pending local edits and edits from another user prompt before overwrite, with snapshots of the displaced version.
-- IndexedDB fallback when no folder is connected; "Browser storage only" pill nudges you to wire up a folder
-- Inside NakliOS, explicitly switch between this browser, the mounted Folder,
-  and encrypted Crate. Each is a separate board library; switching never
-  copies, merges, or deletes boards.
-- Inside NakliOS, card moves stage a before/after location for host review.
-  Commit moves the card once; discard and stale-board rejection leave it in place.
-- Auto-save every 5 s on changes; immediate save on destructive actions
-- Per-board and full-state JSON export / import (merge or replace)
-- CSV and Markdown export
-- Trello JSON import (lists, cards, labels, members, checklists)
-- Card-level audit trail: every card carries `createdBy/createdAt/lastModifiedBy/lastModifiedAt` and the activity log records every change with structured detail (filterable by user, action, card)
-- PWA-lite: inline manifest, installable as an app
-
-**UI**
-- Dark / light theme
-- Palette picker (🎨 in the header) — switch between Trello-default and curated [Rangrez](https://github.com/NakliTechie/rangrez) palettes (SUMI, KINARI, TADELAKT, SANG, SNÖ, MUMBAI ART DECO). Choice persists per browser.
-- Keyboard shortcuts: `N` new card, `E` edit, `/` search, arrows to navigate, `Cmd/Ctrl+Z` undo
-- Touch: long-press a card → "Move to" popover
-- ARIA roles, `prefers-reduced-motion` and `prefers-contrast` support
-
-## Palette
-
-KanZen ships with seven runtime-switchable palettes. Click the 🎨 icon in the top-right to open the picker:
+## Install
 
 | | |
-| --- | --- |
-| **Default Trello** | Atlassian blue gradient — the original chrome |
-| **SUMI 墨** | Zen monochrome calligraphy ink — `japan-03` |
-| **KINARI 生成り** | Edo merchant ledger, washi paper — `japan-02` |
-| **TADELAKT تادلكت** | Polished lime-soap riad wall — `morocco-01` |
-| **SANG سنگ** | Persepolis travertine — `iran-01` |
-| **SNÖ** | First snowfall, frozen lake — `scandinavia-01` |
-| **MUMBAI ART DECO** | Marine Drive at dusk — `india_west-01` |
+|---|---|
+| **Use it** | Open **[kanzen.naklitechie.com](https://kanzen.naklitechie.com/)**. In Chrome or Edge, the install button in the header adds it as an app. |
+| **Self-host** | Download `index.html` and serve it: `python3 -m http.server 8000`, then <http://localhost:8000/>. |
+| **Offline** | Open `index.html` from disk. Boards save to the browser; folders need `https` or `localhost`. |
+| **NakliOS** | KanZen ships inside [NakliOS](https://naklios.dev) and can store boards in its Folder or encrypted Crate. |
 
-Palettes come from the [Rangrez](https://github.com/NakliTechie/rangrez) library — 240 palettes with country-specific color stories. Your choice is persisted in `localStorage` (key `kanzen.palette`) and survives reloads.
+It opens on a starter board. Click **📁 Save to disk** and pick a folder: every board becomes a
+`.kanzen.json` file there, and edits save within five seconds. Without a folder, boards stay in
+this browser and export as JSON at any time.
 
-## Run
+No sign-up, no config file. Every screen and shortcut is in the **?** help inside the app.
 
-Just visit **[kanzen.naklitechie.com](https://kanzen.naklitechie.com/)** in any modern browser. Or, to host it yourself:
+## Why
 
-```bash
-python3 -m http.server 8000
-# then visit http://localhost:8000/
+Your boards live in someone else's database. You cannot grep them, diff them, back them up with
+the rest of your files, or keep using them when the service changes its plan.
+
+KanZen keeps each board as one readable, sorted-key JSON file in a folder you own. Put the folder
+in Dropbox, iCloud, Syncthing or git and you have multi-device boards without a server. It still
+has what you expect from a kanban tool: labels, members, due dates, checklists, attachments,
+comments, list and calendar views, undo, snapshots and an activity feed.
+
+## Work on a board with other people
+
+Put the board folder in git and turn on **team mode** in Board settings. The board splits into
+`_board.json`, one file per card, and an append-only `_activity.jsonl`, so two people editing
+different cards never produce a merge conflict. KanZen notices changes on disk within five
+seconds and reloads them; when both sides changed, it asks before overwriting.
+
+To sync without git, deploy the optional [sync Worker](worker/README.md) to your own Cloudflare
+account. Boards are encrypted in the browser with a passphrase the Worker never sees. To hand
+someone a copy, **🔗 Share** puts the whole board in a link, optionally encrypted. The board
+travels in the `#fragment`, which browsers never send to a server.
+
+## Let an agent work the board
+
+Everything you can do in KanZen is also a tool: 60 of them, the same commands the UI runs. An
+assistant in the browser reaches them through WebMCP; a script in the tab uses `window.kanzen`.
+Agents can read every board and change the view. Any change to your data arrives as a proposal
+under **🤖** in the header, and applies only when you approve it. Destructive proposals take a
+safety snapshot first. The activity feed marks each agent change with the door it came through.
+
+Choosing where boards live, sync credentials, your name and approving proposals stay with you.
+
+## Commands
+
+```
+N                    new card in the first column
+E  or  Enter         edit the focused card
+/                    search titles and descriptions
+← → ↑ ↓              move between cards
+Cmd/Ctrl+Z           undo (50 steps per board)
+Cmd/Ctrl+Shift+Z     redo
+Esc                  close a dialog or menu
+long-press a card    "Move to" on touch screens
 ```
 
-The File System Access API requires HTTPS or `localhost`. IndexedDB fallback works from `file://` too.
+Agents: `window.kanzen.manifest()` lists every tool with its JSON-schema input;
+`window.kanzen.tools.create_card({column_id, title})` returns a proposal id, and `get_proposal`
+reports what happened.
 
-## Privacy
+## Verify it yourself
 
-By default, nothing leaves your machine and the author cannot see your boards. Share URLs encode the board into the hash fragment, which is never sent to the hosting server. If you explicitly configure the optional BYO Cloud Sync Worker, encrypted board payloads plus the metadata documented in [the Worker guide](worker/README.md#privacy-boundary) are sent to that Worker.
+```
+cd scripts && npm ci && npx playwright install --only-shell chromium && cd ..
+node scripts/lint-agent-face.mjs        # every change goes through a declared command
+node scripts/test-lint-agent-face.mjs   # the lint catches six planted faults
+node scripts/test-agent-face.mjs        # 16 checks: every door, approval, undo, reload
+node scripts/test-responsive.mjs        # 10 checks at 1280, 1024, 800 and 375 px
+node scripts/test-naklios-storage.mjs && node scripts/test-team-merge.mjs && node scripts/test-card-review.mjs
+```
 
-## Author
+The lint fails when a button changes data without a command, or when a command is missing from
+the manifest. CI runs all of the above on every push. The WebMCP door is tested against a
+stand-in built from the 2026-09-30 draft spec; no shipping browser exposes it yet.
 
-[Chirag Patnaik](https://naklitechie.github.io/) — part of the [NakliTechie](https://naklitechie.github.io/) browser-native tools series.
+## License
+
+MIT — see [LICENSE](LICENSE). Palettes come from [Rangrez](https://github.com/NakliTechie/rangrez).
+
+Everything that shipped: [FEATURES.md](FEATURES.md) · sync Worker: [worker/README.md](worker/README.md) ·
+part of the [NakliTechie](https://naklitechie.github.io/) browser-native tools series
