@@ -39,3 +39,5 @@ jobs:
         working-directory: scripts
       - name: test-agent-face.mjs
         run: node scripts/test-agent-face.mjs
+      - name: test-responsive.mjs
+        run: node scripts/test-responsive.mjs

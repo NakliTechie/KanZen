@@ -60,6 +60,9 @@ const UI_ONLY = {
   renderActivityModal: 'activity filters', clearActivityFilters: 'activity filters',
   moveFocus: 'keyboard focus',
   onCardDragStart: 'drag start', onColDragStart: 'drag start', onColDragOver: 'drag hover',
+  toggleMoreMenu: 'the ⋯ menu of folded header buttons', closeMoreMenu: 'the ⋯ menu', runMoreItem: 'clicks a folded header button',
+  toggleFilterPanel: 'shows the filter panel on phones', scheduleFitHeader: 'refits the header to its width',
+  onCardClick: 'opens the card editor unless a long-press just opened "Move to"',
   addChecklistItem: 'edits the card draft', _kzClose: 'in-app prompt and confirm dialog', _kzKey: 'in-app prompt and confirm dialog',
 };
 const PRIMITIVE_CALLS = new Set([

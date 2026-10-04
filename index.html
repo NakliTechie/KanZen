@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="author" content="Chirag Patnaik">
 <meta name="description" content="KanZen — Kanban without the noise. Single-file local-first kanban. No server, no account, no board limits.">
 <title>KanZen — Kanban without the noise</title>
@@ -288,7 +288,8 @@
     -webkit-backdrop-filter: blur(6px);
     border-bottom: 1px solid var(--header-border);
     flex-shrink: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;              /* one line; fitHeader() folds what does not fit into ⋯ */
+    overflow: hidden;
     color: var(--header-text);
   }
   header.app-header button { color: var(--header-text); }
@@ -325,10 +326,11 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    flex-shrink: 0;
   }
   .board-switcher select {
     width: auto;
-    min-width: 160px;
+    min-width: 120px;
     max-width: 280px;
     background: var(--header-input-bg);
     color: var(--header-input-text);
@@ -350,14 +352,16 @@
     user-select: none;
     white-space: nowrap;
     font-weight: 500;
+    min-width: 10.5em;          /* the longest label, so saving never refolds the header */
+    text-align: center;
   }
   .save-indicator.saving { color: #fff8d6; }
   .save-indicator.saved  { color: #b3f0c2; }
   .save-indicator.dirty  { color: var(--header-text-mute); }
   .save-indicator.error  { color: #ffb3a8; }
   .header-search {
-    flex: 1;
-    min-width: 140px;
+    flex: 1 1 140px;
+    min-width: 120px;
     max-width: 360px;
     background: var(--header-input-bg);
     color: var(--header-input-text);
@@ -441,6 +445,7 @@
   /* ---------- board ---------- */
   main.board-area {
     flex: 1;
+    min-height: 0;
     overflow-x: auto;
     overflow-y: hidden;
     padding: 12px 14px 80px;
@@ -475,7 +480,7 @@
     border-radius: var(--radius-lg);
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 145px);
+    max-height: 100%;
     border: 2px solid transparent;
     box-shadow: 0 1px 0 rgba(9,30,66,0.25);
   }
@@ -855,7 +860,7 @@
     border-radius: var(--radius-lg);
     margin: 12px 14px 80px;
     overflow: auto;
-    max-height: calc(100vh - 145px);
+    max-height: calc(100% - 92px);
   }
   .list-view table {
     width: 100%;
@@ -903,7 +908,7 @@
     background: var(--bg-elev);
     border-radius: var(--radius-lg);
     padding: 14px;
-    max-height: calc(100vh - 145px);
+    max-height: calc(100% - 92px);
     overflow: auto;
   }
   .cal-header {
@@ -1267,6 +1272,81 @@
   #palette-popover .pop-foot a { color: var(--accent); text-decoration: none; }
   #palette-popover .pop-foot a:hover { text-decoration: underline; }
 
+  /* ---------- responsive chrome: header fold, ⋯ menu, filter panel ---------- */
+  @supports (height: 100dvh) { body { height: 100dvh; } }
+  .kz-folded { display: none !important; }
+  .more-btn { display: none; flex-shrink: 0; }
+  header.app-header.has-folded .more-btn { display: inline-flex; }
+  header.app-header > * { flex-shrink: 0; }
+  header.app-header > .header-search { flex-shrink: 1; }
+  @media (max-width: 900px) { .brand-name { display: none; } .brand { padding-right: 0; } }
+  #more-menu {
+    position: fixed; z-index: 110; display: none;
+    background: var(--bg-elev); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+    padding: 6px; min-width: 220px; max-height: calc(100vh - 80px); overflow-y: auto;
+  }
+  #more-menu.open { display: block; }
+  #more-menu .more-status { font-size: 11px; color: var(--text-mute); padding: 6px 10px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  #more-menu .more-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 10px; border-radius: var(--radius); color: var(--text); text-decoration: none; font-size: 14px; }
+  #more-menu .more-item:hover, #more-menu .more-item:focus-visible { background: rgba(9,30,66,0.06); }
+  [data-theme="dark"] #more-menu .more-item:hover, [data-theme="dark"] #more-menu .more-item:focus-visible { background: rgba(255,255,255,0.06); }
+  #more-menu .more-icon { width: 20px; text-align: center; flex-shrink: 0; }
+  .filter-fields { display: contents; }
+  .filter-toggle { display: none; padding: 6px 12px; font-size: 13px; font-weight: 600; background: var(--header-input-bg); color: var(--header-input-text); border-radius: var(--radius); }
+  .filter-toggle.active { background: var(--header-input-bg-hover); }
+  .view-switch { margin-left: auto; display: flex; gap: 4px; background: var(--header-input-bg); padding: 3px; border-radius: var(--radius); }
+
+  /* phones: two header rows, a collapsible filter panel, one column per screen, full-screen dialogs */
+  @media (max-width: 700px) {
+    header.app-header { flex-wrap: wrap; overflow: visible; row-gap: 6px; padding: max(6px, env(safe-area-inset-top)) 10px 6px; }
+    .brand { padding: 0; }
+    .save-indicator, .header-actions { display: none; }
+    header.app-header [data-fold] { display: none !important; }
+    .board-switcher { flex: 1 1 0; min-width: 0; }
+    .board-switcher select { flex: 1; min-width: 0; max-width: none; }
+    .header-search { order: 10; flex: 1 1 100%; max-width: none; min-width: 0; padding: 9px 12px; }
+    input, select, textarea, .header-search { font-size: 16px; }   /* 16px stops iOS zooming on focus */
+    .filter-bar { padding: 6px 10px; gap: 6px; }
+    .filter-toggle { display: inline-flex; align-items: center; }
+    .filter-fields { display: none; }
+    .filter-bar.filters-open .filter-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; order: 10; flex: 1 1 100%; }
+    .filter-fields .filter-label-txt { display: none; }
+    .filter-bar .filter-fields select { width: 100%; font-size: 16px; padding: 8px 10px; }
+    .filter-fields .clear-filters { grid-column: 1 / -1; text-align: center; padding: 6px; }
+    main.board-area { padding: 10px 10px 24px; gap: 10px; scroll-snap-type: x mandatory; scroll-padding-inline: 10px; scroll-behavior: auto; }
+    .column, .column.add-col-tile { flex: 0 0 min(320px, calc(100vw - 48px)); scroll-snap-align: start; }
+    .column.collapsed { flex: 0 0 44px; }
+    .footer-nav { display: none !important; }   /* its links move into the ⋯ menu */
+    .list-view, .cal-view { margin: 8px 8px 24px; max-height: calc(100% - 32px); }
+    .list-view th:nth-child(n+5), .list-view td:nth-child(n+5) { display: none; }
+    .cal-view { padding: 8px; }
+    .cal-header h3 { font-size: 14px; }
+    .cal-grid { gap: 2px; }
+    .cal-day { min-height: 60px; padding: 3px; font-size: 10px; }
+    .cal-day .cal-card { font-size: 9px; padding: 1px 3px; }
+    #modal-overlay { padding: 0; align-items: stretch; }
+    .modal { max-width: none !important; max-height: none; height: 100%; border-radius: 0; }
+    .modal-header { padding: max(12px, env(safe-area-inset-top)) 14px 12px; }
+    .modal-body { padding: 14px; flex: 1; }
+    .modal-footer { flex-wrap: wrap; padding: 10px 14px max(10px, env(safe-area-inset-bottom)); }
+    #kz-overlay { padding: 24px 12px; }
+    #settings-bg-list > div:first-child { grid-template-columns: repeat(4, 1fr) !important; }
+    #move-popover.open, #palette-popover.open, #more-menu.open {
+      left: 0 !important; right: 0 !important; top: auto !important; bottom: 0;
+      width: auto; min-width: 0; max-height: 70dvh; overflow-y: auto;
+      border-radius: 14px 14px 0 0; padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+    #move-popover button, #palette-popover button, #more-menu .more-item { min-height: 44px; }
+    #toast { max-width: calc(100vw - 32px); bottom: max(24px, env(safe-area-inset-bottom)); }
+  }
+  /* touch: bigger targets, and a long-press opens "Move to" instead of selecting text */
+  @media (pointer: coarse) {
+    .icon-btn, .help-btn { width: 40px; height: 40px; }
+    .col-actions button { padding: 8px 10px; }
+    .card { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  }
+
   /* ---------- agent face: indicator, proposals, preferences ---------- */
   .agent-indicator { width: auto; padding: 4px 8px; font-size: 11px; gap: 4px; }
   .agent-indicator.has-pending { background: rgba(242,169,0,0.35); }
@@ -1360,39 +1440,42 @@
 </head>
 <body>
 
-<header class="app-header">
-  <div class="brand"><span class="brand-mark">KZ</span>KanZen</div>
+<header class="app-header" id="app-header">
+  <div class="brand"><span class="brand-mark">KZ</span><span class="brand-name">KanZen</span></div>
   <div class="board-switcher">
-    <select id="board-select" title="Switch board"></select>
-    <button class="icon-btn" onclick="newBoardPrompt()" title="New board">+</button>
-    <button class="icon-btn" onclick="renameBoardPrompt()" title="Rename board">✎</button>
-    <button class="icon-btn btn-danger" onclick="deleteBoardConfirm()" title="Delete board">🗑</button>
+    <select id="board-select" title="Switch board" aria-label="Switch board"></select>
+    <button class="icon-btn" data-fold="13" onclick="newBoardPrompt()" title="New board">+</button>
+    <button class="icon-btn" data-fold="12" onclick="renameBoardPrompt()" title="Rename board">✎</button>
+    <button class="icon-btn btn-danger" data-fold="11" onclick="deleteBoardConfirm()" title="Delete board">🗑</button>
   </div>
   <input class="header-search" id="search-input" type="text" placeholder="Search cards…">
   <div class="save-indicator" id="save-indicator">Ready</div>
-  <button id="storage-hint" class="icon-btn" style="display:none;width:auto;padding:4px 8px;font-size:11px;font-weight:500;gap:4px;" onclick="handleStorageButton()" title="Choose where this board library lives.">📁 Save to disk</button>
+  <button id="storage-hint" class="icon-btn" data-fold="14" style="display:none;width:auto;padding:4px 8px;font-size:11px;font-weight:500;gap:4px;" onclick="handleStorageButton()" title="Choose where this board library lives.">📁 Save to disk</button>
   <button id="sync-indicator" class="icon-btn" style="display:none;width:auto;padding:4px 8px;font-size:11px;gap:4px;" onclick="onSyncClick()" title="Cloud sync"></button>
   <button id="agent-indicator" class="icon-btn agent-indicator" style="display:none;" onclick="openModal('agent-modal')" title="Agent activity" aria-label="Agent proposals and activity">🤖 <span id="agent-count"></span></button>
-  <button class="help-btn" onclick="openModal('help-modal')" title="Help">?</button>
+  <button class="help-btn" data-fold="10" onclick="openModal('help-modal')" title="Help">?</button>
   <div class="header-actions">
-    <button class="icon-btn" onclick="undo()" title="Undo (Cmd/Ctrl+Z)" aria-label="Undo">↶</button>
-    <button class="icon-btn" onclick="redo()" title="Redo (Cmd/Ctrl+Shift+Z)" aria-label="Redo">↷</button>
-    <button class="icon-btn" onclick="openModal('snapshots-modal')" title="Snapshots" aria-label="Snapshots">📸</button>
-    <button class="icon-btn" onclick="openModal('activity-modal')" title="Activity feed" aria-label="Activity feed">📜</button>
-    <button class="icon-btn" onclick="openShareModal()" title="Share board" aria-label="Share board">🔗</button>
-    <button class="icon-btn" onclick="openModal('settings-modal')" title="Board settings" aria-label="Board settings">⚙</button>
-    <button class="icon-btn" onclick="openModal('import-export-modal')" title="Import / export" aria-label="Import / export">⇅</button>
-    <button class="icon-btn" id="install-btn" style="display:none;" onclick="triggerInstall()" title="Install as app" aria-label="Install as app">⤓</button>
-    <button class="icon-btn" onclick="openModal('prefs-modal')" title="Preferences" aria-label="Preferences">👤</button>
-    <button class="icon-btn" onclick="togglePalettePopover()" id="palette-btn" title="Palette" aria-label="Palette">🎨</button>
-    <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">◐</button>
+    <button class="icon-btn" data-fold="9" onclick="undo()" title="Undo (Cmd/Ctrl+Z)" aria-label="Undo">↶</button>
+    <button class="icon-btn" data-fold="8" onclick="redo()" title="Redo (Cmd/Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+    <button class="icon-btn" data-fold="7" onclick="openModal('snapshots-modal')" title="Snapshots" aria-label="Snapshots">📸</button>
+    <button class="icon-btn" data-fold="6" onclick="openModal('activity-modal')" title="Activity feed" aria-label="Activity feed">📜</button>
+    <button class="icon-btn" data-fold="5" onclick="openShareModal()" title="Share board" aria-label="Share board">🔗</button>
+    <button class="icon-btn" data-fold="4" onclick="openModal('settings-modal')" title="Board settings" aria-label="Board settings">⚙</button>
+    <button class="icon-btn" data-fold="3" onclick="openModal('import-export-modal')" title="Import / export" aria-label="Import / export">⇅</button>
+    <button class="icon-btn" data-fold="2" id="install-btn" style="display:none;" onclick="triggerInstall()" title="Install as app" aria-label="Install as app">⤓</button>
+    <button class="icon-btn" data-fold="1" onclick="openModal('prefs-modal')" title="Preferences" aria-label="Preferences">👤</button>
+    <button class="icon-btn" data-fold="0" onclick="togglePalettePopover()" id="palette-btn" title="Palette" aria-label="Palette">🎨</button>
+    <button class="icon-btn" data-fold="0" onclick="toggleTheme()" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">◐</button>
   </div>
+  <button class="icon-btn more-btn" id="more-btn" onclick="toggleMoreMenu()" title="More" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">⋯</button>
 </header>
 
-<div class="filter-bar">
-  <span>Filter:</span>
-  <select id="filter-label"><option value="">All labels</option></select>
-  <select id="filter-priority">
+<div class="filter-bar" id="filter-bar">
+  <button class="filter-toggle" id="filter-toggle" onclick="toggleFilterPanel()" aria-expanded="false" aria-controls="filter-fields">Filters</button>
+  <div class="filter-fields" id="filter-fields">
+  <span class="filter-label-txt">Filter:</span>
+  <select id="filter-label" aria-label="Filter by label"><option value="">All labels</option></select>
+  <select id="filter-priority" aria-label="Filter by priority">
     <option value="">All priorities</option>
     <option value="urgent">Urgent</option>
     <option value="high">High</option>
@@ -1400,16 +1483,17 @@
     <option value="low">Low</option>
     <option value="none">None</option>
   </select>
-  <select id="filter-due">
+  <select id="filter-due" aria-label="Filter by due date">
     <option value="">All due dates</option>
     <option value="overdue">Overdue</option>
     <option value="today">Due today</option>
     <option value="week">Due this week</option>
     <option value="none">No date</option>
   </select>
-  <select id="filter-member"><option value="">All members</option></select>
+  <select id="filter-member" aria-label="Filter by member"><option value="">All members</option></select>
   <span class="clear-filters" onclick="clearFilters()">Clear</span>
-  <div style="margin-left:auto;display:flex;gap:4px;background:var(--header-input-bg);padding:3px;border-radius:var(--radius);">
+  </div>
+  <div class="view-switch">
     <button class="view-pill" data-view="board"    onclick="setViewMode('board')">Board</button>
     <button class="view-pill" data-view="list"     onclick="setViewMode('list')">List</button>
     <button class="view-pill" data-view="calendar" onclick="setViewMode('calendar')">Calendar</button>
@@ -1480,6 +1564,10 @@
           </div>
         </div>
         <div class="editor-side">
+          <div class="side-section">
+            <div class="side-label">Column</div>
+            <select id="card-column" aria-label="Move to column"></select>
+          </div>
           <div class="side-section">
             <div class="side-label">Priority</div>
             <select id="card-priority">
@@ -1940,6 +2028,8 @@
 <div id="move-popover" role="menu" aria-label="Move card to column"></div>
 
 <div id="palette-popover" role="menu" aria-label="Palette picker"></div>
+
+<div id="more-menu" role="menu" aria-label="More actions"></div>
 
 <div id="import-banner">
   <strong>📥 A shared KanZen board is in this link.</strong>
@@ -4410,6 +4500,7 @@ function renderFilters(){
   $('filter-due').value = S.filter.due || '';
   // only write the search box when it differs, so typing keeps its caret
   if($('search-input').value !== (S.filter.search || '')) $('search-input').value = S.filter.search || '';
+  updateFilterToggle();
 }
 
 function cardMatchesFilter(card, board, f=S.filter){
@@ -4771,7 +4862,7 @@ function renderCard(card, board, matches){
   el.dataset.cardId = card.id;
   el.tabIndex = 0;
   el.draggable = true;
-  el.addEventListener('click', () => openCardEditor(card.id));
+  el.addEventListener('click', () => onCardClick(card.id));
   el.addEventListener('focus', () => { S.focusedCardId = card.id; });
   el.addEventListener('dragstart', e => onCardDragStart(e, card.id));
   el.addEventListener('dragend',   e => el.classList.remove('dragging'));
@@ -4987,6 +5078,15 @@ function openCardEditor(cardId){
   $('card-desc-input').value  = card.description || '';
   $('card-priority').value    = card.priority || 'none';
   $('card-due').value         = card.dueDate || '';
+  const columnSelect = $('card-column');
+  columnSelect.innerHTML = '';
+  for(const column of b.columns){
+    const option = document.createElement('option');
+    option.value = column.id;
+    option.textContent = column.name;
+    columnSelect.appendChild(option);
+  }
+  columnSelect.value = findColumnByCard(b, cardId)?.id || '';
   renderDescPreview();
   renderEditorChecklist();
   updateAiSubtasksBtn(window.naklios && window.naklios.capabilities);
@@ -5236,7 +5336,12 @@ async function saveCardModal(){
     member_ids: draft.memberIds,
     checklist: draft.checklist.map(item => ({ ...(item.id ? { id:item.id } : {}), text:item.text, done:!!item.done })),
   });
-  if(result) closeModal();
+  if(!result) return;
+  const toColumn = $('card-column').value;
+  if(toColumn && toColumn !== findColumnByCard(currentBoard(), card.id)?.id){
+    if(!await kzUi('move_card', { card_id: card.id, column_id: toColumn })) return;
+  }
+  closeModal();
 }
 
 /* ============================================================
@@ -5542,7 +5647,7 @@ function togglePalettePopover(){
   renderPalettePopover();
   pop.classList.add('open');
   // measure after open so width is real
-  const btn = $('palette-btn');
+  const btn = $('palette-btn').offsetParent ? $('palette-btn') : $('more-btn');
   const r = btn.getBoundingClientRect();
   const pr = pop.getBoundingClientRect();
   let left = Math.max(8, r.right - pr.width);
@@ -5650,6 +5755,7 @@ function isTypingTarget(el){
 function onKey(e){
   if(e.key === 'Escape'){
     if($('modal-overlay').classList.contains('open')){ closeModal(); return; }
+    if($('more-menu').classList.contains('open')){ closeMoreMenu(); return; }
   }
   // Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z work even from input fields
   if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z'){
@@ -6585,15 +6691,24 @@ function setBoardBackground(kind, value){
 
 let _longPressTimer = null;
 let _longPressCardId = null;
+let _suppressCardClick = null;   // the card whose long-press just opened "Move to"
+function onCardClick(cardId){
+  if(_suppressCardClick === cardId){ _suppressCardClick = null; return; }
+  _suppressCardClick = null;
+  openCardEditor(cardId);
+}
 function setupCardLongPress(cardEl, cardId){
   cardEl.addEventListener('pointerdown', e => {
     if(e.pointerType !== 'touch') return;
     _longPressCardId = cardId;
     _longPressTimer = setTimeout(() => {
       _longPressTimer = null;
+      _suppressCardClick = cardId;
       openMovePopover(cardId, e.clientX, e.clientY);
     }, 450);
   });
+  // a touch long-press would otherwise also open the browser's own context menu
+  cardEl.addEventListener('contextmenu', e => { if(matchMedia('(pointer: coarse)').matches) e.preventDefault(); });
   const cancel = () => {
     if(_longPressTimer){ clearTimeout(_longPressTimer); _longPressTimer = null; }
   };
@@ -7019,6 +7134,121 @@ async function syncPullAll(){
   })();
   try{ return await _syncPullPromise; }
   finally{ _syncPullPromise=null; }
+}
+
+/* ============================================================
+   Responsive chrome — header fold, the ⋯ menu, the filter panel
+   Header buttons carry data-fold: the lowest number folds first. On wide
+   screens fitHeader() folds buttons into the ⋯ menu until the header fits on
+   one line; on phones CSS folds all of them and the menu holds everything.
+   ============================================================ */
+
+const PHONE_QUERY = '(max-width: 700px)';
+function isPhoneLayout(){ return matchMedia(PHONE_QUERY).matches; }
+function foldableHeaderItems(){
+  return [...$('app-header').querySelectorAll('[data-fold]')]
+    .sort((a, b) => Number(a.dataset.fold) - Number(b.dataset.fold));
+}
+function fitHeader(){
+  const header = $('app-header');
+  if(!header) return;
+  const items = foldableHeaderItems();
+  for(const el of items) el.classList.remove('kz-folded');
+  header.classList.add('has-folded');            // keep room for ⋯ while measuring
+  if(!isPhoneLayout()){
+    let folded = 0;
+    for(const el of items){
+      if(header.scrollWidth <= header.clientWidth + 1) break;
+      if(getComputedStyle(el).display === 'none') continue;
+      el.classList.add('kz-folded');
+      folded++;
+    }
+    if(!folded) header.classList.remove('has-folded');
+  }
+  if($('more-menu').classList.contains('open')) renderMoreMenu();
+}
+let _fitFrame = 0;
+function scheduleFitHeader(){
+  cancelAnimationFrame(_fitFrame);
+  _fitFrame = requestAnimationFrame(fitHeader);
+}
+function watchHeaderFit(){
+  const header = $('app-header');
+  const observer = new ResizeObserver(scheduleFitHeader);
+  observer.observe(header);
+  for(const el of header.querySelectorAll(':scope > *, .header-actions > *')) observer.observe(el);
+  matchMedia(PHONE_QUERY).addEventListener('change', scheduleFitHeader);
+  fitHeader();
+}
+// The header buttons the ⋯ menu offers right now: folded ones, or every foldable one on a
+// phone. A button the app hides for its own reasons (install, storage hint) stays out.
+function foldedHeaderItems(){
+  const phone = isPhoneLayout();
+  return foldableHeaderItems()
+    .filter(el => el.style.display !== 'none' && (phone || el.classList.contains('kz-folded')))
+    .sort((a, b) => Number(b.dataset.fold) - Number(a.dataset.fold));
+}
+function renderMoreMenu(){
+  const menu = $('more-menu');
+  menu.innerHTML = '';
+  const status = kzEl('div', 'more-status', `${$('save-indicator').textContent} · ${kzStorageLabel()}`);
+  menu.appendChild(status);
+  for(const button of foldedHeaderItems()){
+    const named = button.getAttribute('aria-label') || button.title;
+    const longText = button.textContent.trim().length > 3;
+    const row = kzEl('button', 'more-item');
+    row.setAttribute('role', 'menuitem');
+    row.append(kzEl('span', 'more-icon', longText ? '' : button.textContent.trim()), kzEl('span', '', longText ? button.textContent.trim() : named));
+    row.addEventListener('click', () => runMoreItem(button));
+    menu.appendChild(row);
+  }
+  if(isPhoneLayout()){
+    for(const link of document.querySelectorAll('.footer-nav a')){
+      const row = kzEl('a', 'more-item', link.textContent.trim());
+      row.href = link.href;
+      row.setAttribute('role', 'menuitem');
+      menu.appendChild(row);
+    }
+  }
+}
+function toggleMoreMenu(){
+  const menu = $('more-menu');
+  if(menu.classList.contains('open')){ closeMoreMenu(); return; }
+  closePalettePopover();
+  renderMoreMenu();
+  menu.classList.add('open');
+  $('more-btn').setAttribute('aria-expanded', 'true');
+  if(!isPhoneLayout()){
+    const r = $('more-btn').getBoundingClientRect();
+    const width = menu.getBoundingClientRect().width;
+    menu.style.left = Math.max(8, Math.min(window.innerWidth - width - 8, r.right - width)) + 'px';
+    menu.style.top = (r.bottom + 6) + 'px';
+  }
+  menu.querySelector('.more-item')?.focus();
+}
+function closeMoreMenu(){
+  $('more-menu').classList.remove('open');
+  $('more-btn')?.setAttribute('aria-expanded', 'false');
+}
+// Runs the folded button's own action after this click finishes, so the click that
+// chose the item cannot close the palette or menu the action opens.
+function runMoreItem(button){
+  closeMoreMenu();
+  setTimeout(() => button.click(), 0);
+}
+document.addEventListener('click', e => {
+  if(!e.target.closest('#more-menu') && !e.target.closest('#more-btn')) closeMoreMenu();
+});
+function toggleFilterPanel(){
+  const open = $('filter-bar').classList.toggle('filters-open');
+  $('filter-toggle').setAttribute('aria-expanded', String(open));
+}
+function updateFilterToggle(){
+  const f = S.filter;
+  const active = [f.search, f.labelId, f.memberId, f.priority, f.due].filter(Boolean).length;
+  const toggle = $('filter-toggle');
+  toggle.textContent = active ? `Filters (${active})` : 'Filters';
+  toggle.classList.toggle('active', active > 0);
 }
 
 /* ============================================================
@@ -8859,6 +9089,7 @@ async function init(){
   renderAll();
   setSaveIndicator('saved');
   refreshStorageStatus();
+  watchHeaderFit();
   setSyncIndicator('idle');
   // seed history baseline for the current board (without dirtying)
   if(S.currentBoardId){ pushHistory(); }
