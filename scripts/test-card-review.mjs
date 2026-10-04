@@ -78,7 +78,9 @@ const context = vm.createContext({
     onDecision: callback => { decision = callback; },
   } },
 });
-vm.runInContext(`${extractFunction('boardRevisionSignature')}\n${html.slice(start, end)}\n` +
+const stamps = html.match(/const BOARD_SAVE_STAMPS = [^;]+;/);
+assert.ok(stamps, 'the save-stamp list exists');
+vm.runInContext(`${stamps[0]}\n${extractFunction('boardRevisionSignature')}\n${html.slice(start, end)}\n` +
   'globalThis.cardReview = { stageCardMove, pendingCardMoves };', context);
 
 const { stageCardMove, pendingCardMoves } = context.cardReview;
@@ -112,4 +114,13 @@ assert.throws(() => decision({ type: 'commit', proposal_id: 'prop_3' }), /Board 
 assert.deepEqual(board.columns.map(column => column.cardIds), [[], ['card-1']]);
 assert.equal(effects.saved, 1);
 
-console.log('KanZen card review: native diff, commit once, discard, and stale-base refusal passed');
+// Autosave and sync rewrite save stamps without an edit; a staged move must still commit.
+board._meta = { boardId: 'board-1', lastModified: '2026-10-04T10:00:00.000Z', syncRevision: 3 };
+await stageCardMove('card-1', 'todo', 0);
+board._meta.lastModified = '2026-10-04T10:00:05.000Z';
+board._meta.syncRevision = 4;
+decision({ type: 'commit', proposal_id: 'prop_4' });
+assert.deepEqual(board.columns.map(column => column.cardIds), [['card-1'], []],
+  'a save between staging and commit is not a change to the board');
+
+console.log('KanZen card review: native diff, commit once, discard, stale-base refusal, and save-stamp tolerance passed');
