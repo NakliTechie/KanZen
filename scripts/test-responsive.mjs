@@ -141,6 +141,20 @@ try{
     assert.equal(where, 'To Do');
     assert.equal(await page.isVisible('#move-popover.open'), false);
   });
+  await step('375px phone: columns reorder by touch, in the header and in settings', async () => {
+    const names = () => page.evaluate(() => currentBoard().columns.map(c => c.name));
+    assert.deepEqual(await names(), ['To Do','In Progress','Done']);
+    assert.equal(await page.isVisible('#board-area .column >> nth=0 >> [data-column-action="left"]'), false);
+    await page.locator('#board-area .column').first().locator('[data-column-action="right"]').tap();
+    await page.waitForFunction(() => currentBoard().columns[0].name === 'In Progress');
+    assert.deepEqual(await names(), ['In Progress','To Do','Done']);
+    await page.evaluate(() => openModal('settings-modal'));
+    await page.locator('#settings-columns-list > div').nth(2).getByRole('button', { name: 'Move column up' }).tap();
+    await page.waitForFunction(() => currentBoard().columns[1].name === 'Done');
+    assert.deepEqual(await names(), ['In Progress','Done','To Do']);
+    assert.equal(await page.inputValue('#settings-columns-list > div:nth-child(2) input[type=text]'), 'Done', 'settings re-render in the new order');
+    await page.evaluate(() => closeModal());
+  });
   await step('375px phone: list and calendar fit the screen', async () => {
     for(const mode of ['list', 'calendar']){
       await page.evaluate(mode => kzUi('set_view', { mode }), mode);

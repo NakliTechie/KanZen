@@ -523,6 +523,9 @@
   [data-theme="dark"] .col-count { background: rgba(255,255,255,0.08); }
   .col-count.over-wip { background: rgba(235,90,70,0.2); color: var(--danger); }
   .col-actions { display: flex; gap: 0; }
+  .col-actions .col-move { display: none; }
+  @media (pointer: coarse) { .col-actions .col-move { display: inline-block; } }
+  .column:first-of-type .col-move[data-column-action="left"] { visibility: hidden; }
   .col-actions button {
     padding: 4px 8px;
     font-size: 14px;
@@ -4594,6 +4597,8 @@ function renderKanbanView(area){
           ${filterActive ? matched + '/' : ''}${total}${col.wipLimit>0 ? ' / '+col.wipLimit : ''}
         </span>
         <div class="col-actions">
+          <button data-column-action="left" class="col-move" title="Move column left" aria-label="Move column left">‹</button>
+          <button data-column-action="right" class="col-move" title="Move column right" aria-label="Move column right">›</button>
           <button data-column-action="collapse" title="Collapse">${col.collapsed?'▸':'▾'}</button>
           <button data-column-action="delete" title="Delete column">🗑</button>
         </div>
@@ -4608,6 +4613,8 @@ function renderKanbanView(area){
     const nameInput=colEl.querySelector('.col-name');
     nameInput.addEventListener('change',()=>renameColumn(col.id,nameInput.value));
     nameInput.addEventListener('click',event=>event.stopPropagation());
+    colEl.querySelector('[data-column-action="left"]').addEventListener('click',()=>shiftColumn(col.id,-1));
+    colEl.querySelector('[data-column-action="right"]').addEventListener('click',()=>shiftColumn(col.id,1));
     colEl.querySelector('[data-column-action="collapse"]').addEventListener('click',()=>toggleColumnCollapse(col.id));
     colEl.querySelector('[data-column-action="delete"]').addEventListener('click',()=>deleteColumnConfirm(col.id));
     colEl.querySelector('.add-card-btn').addEventListener('click',()=>addCardPrompt(col.id));
@@ -4985,6 +4992,19 @@ function onColDrop(e, colId){
 function moveColumnTo(columnId, position){
   return kzUi('move_column', { column_id: columnId, position });
 }
+// Touch and keyboard reorder: drag is mouse-only, so columns also move one step at a time.
+function shiftColumn(columnId, delta){
+  const columns = currentBoard()?.columns || [];
+  const from = columns.findIndex(c => c.id === columnId);
+  const to = from + delta;
+  if(from < 0 || to < 0 || to >= columns.length) return;
+  return moveColumnTo(columnId, to);
+}
+async function shiftColumnFromSettings(columnId, delta){
+  if(!await saveSettingsModal(true)) return;
+  await shiftColumn(columnId, delta);
+  openSettingsModal();
+}
 
 /* ============================================================
    Board CRUD — UI side: gather input, then dispatch a command
@@ -5359,11 +5379,15 @@ function openSettingsModal(){
     row.innerHTML = `
       <input type="text" value="${escapeHtml(c.name)}" style="flex:1;">
       <input type="number" value="${c.wipLimit||0}" min="0" placeholder="WIP" style="width:80px;" title="WIP limit (0 = none)">
+      <button title="Move up" aria-label="Move column up">↑</button>
+      <button title="Move down" aria-label="Move column down">↓</button>
       <button title="Remove">✕</button>
     `;
-    const [nameI, wipI, rm] = row.children;
+    const [nameI, wipI, up, down, rm] = row.children;
     nameI.dataset.colId = c.id;
     wipI.dataset.colId  = c.id;
+    up.onclick = () => shiftColumnFromSettings(c.id, -1);
+    down.onclick = () => shiftColumnFromSettings(c.id, 1);
     rm.onclick = () => removeColumnFromSettings(c.id);
     cl.appendChild(row);
   }
