@@ -2,6 +2,15 @@
 
 All notable changes to KanZen. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [semver](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **NakliOS commands.** `commands.json` declares six commands (`board.list`, `board.read`, `card.list`, `card.add`, `card.move`, `proposal.status`). Inside NakliOS the voice assistant and Anvil reach them through the host's grant, which opens KanZen minimized when it is closed. They take board, column and card names and run the same tools as the other doors, so `card.add` and `card.move` stay proposals and return a `proposal_id`. Standalone KanZen does not register them.
+- Gate: `scripts/test-commands.mjs` checks `commands.json` against the host's rules and its handlers, then runs commands through a stand-in host.
+
+### Changed
+- The inlined NakliOS SDK is current, which brings `experimental_commands`.
+
 ## [1.0.0] — 2026-10-04
 
 The first tagged release. Everything KanZen has shipped since April 2026 is in it.

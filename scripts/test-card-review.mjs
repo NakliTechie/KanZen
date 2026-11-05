@@ -16,7 +16,7 @@ const window = {
   location: { search: '' },
   addEventListener(type, callback) { if (type === 'message') sdkListener = callback; },
 };
-vm.runInNewContext(sdkMatch[1], { window, document: {}, URLSearchParams, Set, Map, Promise,
+vm.runInNewContext(sdkMatch[1], { window, document: {}, URL, URLSearchParams, Set, Map, Promise,
   Object, Error, Date, setTimeout: () => 0, clearTimeout: () => {} });
 assert.equal(typeof window.naklios.review?.stage, 'function', 'vendored SDK exposes native review staging');
 assert.equal(typeof window.naklios.review?.onDecision, 'function', 'vendored SDK exposes review decisions');

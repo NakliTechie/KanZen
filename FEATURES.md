@@ -67,6 +67,7 @@ Palettes come from the [Rangrez](https://github.com/NakliTechie/rangrez) library
 **Agent face** (2026-10-02)
 - Every UI action is a command declared once in `KZ_TOOLS`: 60 callable tools (16 read, 5 session, 28 write, 11 destructive) and 8 person-only acts
 - Doors: WebMCP (`document.modelContext` / `navigator.modelContext`), `window.kanzen`, and a cross-tab `BroadcastChannel('kanzen-agent')` that is off until you open it in Preferences
+- Inside NakliOS, `commands.json` adds a fourth door for the voice assistant and Anvil: six commands that take names, gated by the host's grant and independent of the Preferences channel switch; `card.add` and `card.move` return a `proposal_id`
 - Write and destructive calls become proposals you approve under 🤖; destructive approvals take a safety snapshot first; `apply_changes` batches edits into one proposal and one undo step
 - The activity feed marks every agent change "via agent" with its door and caller
 
