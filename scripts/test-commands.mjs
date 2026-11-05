@@ -67,10 +67,10 @@ const hostPage = `<!doctype html><iframe id="app" src="/index.html" style="width
     }
     if(msg.type === 'naklios:review:applied') window.host.applied.push(msg);
   });
-  window.host.invoke = (name, args = {}) => new Promise(resolve => {
+  window.host.invoke = (name, args = {}, caller = null) => new Promise(resolve => {
     const invokeId = 'c' + (++counter);
     waiting.set(invokeId, resolve);
-    send({ type:'naklios:commands:invoke', invokeId, name, args: structuredClone(args) });
+    send({ type:'naklios:commands:invoke', invokeId, name, args: structuredClone(args), caller });
   });
   window.host.commit = proposal_id => send({ type:'naklios:review:commit', proposal_id });
 </script>`;
@@ -117,7 +117,7 @@ try{
   await page.goto(url + 'host.html');
   await page.waitForFunction(() => window.host.registered);
   const app = page.frames().find(frame => frame.url().endsWith('/index.html'));
-  const invoke = (name, args) => page.evaluate(([name, args]) => window.host.invoke(name, args), [name, args]);
+  const invoke = (name, args) => page.evaluate(([name, args]) => window.host.invoke(name, args, 'voice-assistant'), [name, args]);
   const result = async (name, args) => {
     const reply = await invoke(name, args);
     assert.equal(reply.error, undefined, `${name} failed: ${reply.error}`);
@@ -159,6 +159,7 @@ try{
     const hostProposal = await page.evaluate(() => window.host.staged[0]);
     assert.equal(hostProposal.tool, 'kanzen.agent');
     assert.equal(hostProposal.diff.door, 'commands');
+    assert.equal(hostProposal.diff.caller, 'voice-assistant', 'the host\'s caller reaches review');
     assert.equal((await result('card.list', { text: 'Call the plumber' })).total, before, 'nothing changes before approval');
     assert.equal((await result('proposal.status', { proposal_id: proposalId })).status, 'pending');
     assert.deepEqual((await result('proposal.status')).proposals.map(p => p.proposal_id), [proposalId]);
@@ -195,6 +196,22 @@ try{
     assert.match((await invoke('card.move', { card: 'twin', column: last.name })).error, /More than one card/);
     const log = await app.evaluate(() => KZ_AGENT.calls.filter(call => call.door === 'commands' && call.outcome === 'error').map(call => call.detail));
     assert.equal(log.length, 2);
+  });
+
+  await step('the door log names the host\'s caller on every command call', async () => {
+    const callers = await app.evaluate(() => [...new Set(KZ_AGENT.calls.filter(call => call.door === 'commands').map(call => call.caller))]);
+    assert.deepEqual(callers, ['voice-assistant']);
+  });
+
+  await step('card.list returns at most 50 cards, whatever limit it is given', async () => {
+    await app.evaluate(async column => {
+      for(let n = 0; n < 55; n++) await kzDispatch('create_card', { column_id: column, title: `Bulk ${n}` }, KZ_PERSON);
+    }, first.id);
+    const capped = await result('card.list', { text: 'Bulk', limit: 500 });
+    assert.equal(capped.total, 55);
+    assert.equal(capped.cards.length, 50);
+    assert.equal((await result('card.list', { text: 'Bulk' })).cards.length, 20);
+    assert.equal((await result('card.list', { text: 'Bulk', limit: 3 })).cards.length, 3);
   });
 
   await context.close();

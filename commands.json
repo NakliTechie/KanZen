@@ -29,7 +29,7 @@
           "text": { "type": "string", "minLength": 1, "description": "Words to look for in card titles and descriptions" },
           "due": { "type": "string", "enum": ["overdue", "today", "week", "none"], "description": "Due date filter" },
           "priority": { "type": "string", "enum": ["none", "low", "medium", "high", "urgent"], "description": "Priority filter" },
-          "limit": { "type": "integer", "description": "Most cards to return, 20 if left out" }
+          "limit": { "type": "integer", "description": "Most cards to return, at most 50; 20 if left out" }
         }
       }
     },
