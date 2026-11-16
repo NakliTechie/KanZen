@@ -9,7 +9,11 @@
   "devDependencies": {
     "acorn": "8.15.0",
     "acorn-walk": "8.3.4",
-    "playwright": "1.62.1"
+    "chrono-node": "2.10.3",
+    "esbuild": "0.28.2",
+    "playwright": "1.62.1",
+    "rrule-temporal": "2.2.8",
+    "temporal-polyfill": "1.0.6"
   },
   "version": "1.0.0"
 }
