@@ -103,6 +103,12 @@ await check('ICS: absolute triggers are UTC when the zone converter is given (RF
   assert.ok(u.includes('TRIGGER;VALUE=DATE-TIME:20261117T023000Z'));
   assert.ok(!u.some(l => /^TRIGGER;VALUE=DATE-TIME:\d{8}T\d{6}$/.test(l)));
 });
+await check('todo.txt rec: anchors the repeat on the task date, with + meaning a fixed schedule', () => {
+  const stub = phrase => /week/.test(phrase) ? { repeat: { rrule: 'FREQ=WEEKLY', time: null, mode: 'fixed', tz: 'UTC', anchor: '2026-11-16', resetChecklist: false } } : null;
+  const r = X.parseTodoTxt('Water lawn rec:+1w due:2026-11-18', { today: '2026-11-16', parseRepeat: stub });
+  assert.equal(r.tasks[0].repeat.anchor, '2026-11-18');
+  assert.equal(r.tasks[0].repeat.mode, 'fixed');
+});
 await check('ICS: foldLine never splits a multi-byte character', () => {
   const s = 'X:' + 'é'.repeat(100);
   const parts = X.foldLine(s).split('\r\n');

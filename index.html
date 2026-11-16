@@ -4219,6 +4219,8 @@
         words.push(w);
       }
       t.title = words.join(' ').trim();
+      // A repeat counts from the task's own date (DTSTART), not the import day, so a weekly rule keeps its weekday.
+      if(t.repeat && (t.dueDate || t.startDate)) t.repeat.anchor = t.dueDate || t.startDate;
       if(!t.title) warnings.push(`line ${lineNo}: empty title`);
       tasks.push(t);
     });
@@ -10680,7 +10682,17 @@ function kzReminderInstances(){
   const { now, today, tz } = kzClock();
   return KzReminders.instances(kzBoardList(), S.habits, kzHabitFold(), { now, today, tz, horizonDays: 2 }) || [];
 }
+// Tabs on one origin do not share in-memory boards, so a fired key is also kept in localStorage, which every
+// KanZen tab on the origin reads synchronously; the board-file log covers windows on other origins (N3).
+const KZ_FIRED_KEY = 'kanzen.firedReminders';
+function kzSharedFired(){
+  try{ const v = JSON.parse(localStorage.getItem(KZ_FIRED_KEY) || '{}'); return isPlainRecord(v) ? v : {}; }catch(_){ return {}; }
+}
+function kzShareFired(key, stamp){
+  try{ localStorage.setItem(KZ_FIRED_KEY, JSON.stringify(kzPruned({ ...kzSharedFired(), [key]: stamp }))); }catch(_){ /* storage blocked: the board log still applies */ }
+}
 function kzReminderFired(key){
+  if(kzSharedFired()[key]) return true;
   if(String(key).startsWith('habit:')) return !!S.settings.habitReminderLog?.[key];
   const boardId = String(key).split(':')[1];
   return !!(Object.hasOwn(S.boards, boardId) && S.boards[boardId].reminderLog?.[key]);
@@ -10692,6 +10704,7 @@ function kzPruned(log){
 // Records a fired reminder so no other window fires it again. A snoozed one-shot reminder is removed.
 function kzMarkReminderFired(key){
   const stamp = new Date().toISOString();
+  kzShareFired(key, stamp);
   if(String(key).startsWith('habit:')){
     S.settings.habitReminderLog = kzPruned({ ...(S.settings.habitReminderLog || {}), [key]: stamp });
     storage.saveSettings(S.settings);
@@ -11198,7 +11211,9 @@ async function cmdUndoCheckin(input, ctx){
 
 /* ---------- import and export commands ---------- */
 function cmdExportIcs(){
-  const content = KzInterop.toIcs(kzBoardList(), { now: Date.now(), prodId: '-//NakliTechie//KanZen//EN' });
+  const tz = kzTz();
+  // Absolute alarm triggers must be UTC (RFC 5545 3.8.6.3); DTSTART and DUE stay floating local times.
+  const content = KzInterop.toIcs(kzBoardList(), { now: Date.now(), prodId: '-//NakliTechie//KanZen//EN', localToMs: local => KzReminders.localToMs(local, tz) });
   return { filename: 'kanzen-tasks-' + kzToday() + '.ics', mime_type: 'text/calendar', content };
 }
 function cmdExportTodoTxt(){
@@ -11218,7 +11233,7 @@ function kzCardFromDraft(b, t){
 }
 async function cmdImportTodoTxt(input, ctx){
   const { today } = kzClock();
-  const parsed = KzInterop.parseTodoTxt(input.text, { today }) || {};
+  const parsed = KzInterop.parseTodoTxt(input.text, { today, tz: kzTz(), parseRepeat: (phrase, opts) => KzTasks.parseRepeat(phrase, opts) }) || {};
   const tasks = parsed.tasks || [];
   if(!tasks.length) throw kzError('invalid_input', 'No tasks found in this todo.txt');
   const b = await kzTaskBoard({ board_id: input.board_id || kzInboxBoard()?.id || S.currentBoardId });
@@ -13262,7 +13277,7 @@ const KZ_TOOLS = [
   { name:'import_todotxt', title:'Import todo.txt', kind:'write', run: cmdImportTodoTxt,
     description:'Add tasks from todo.txt text to a board (default: the Inbox). Priority, due:, t: (start), done marks, +project and @context (as labels) carry over.',
     input:{ text:{ type:'string', minLength:1, maxLength:5000000 }, board_id: KZ_ID }, required:['text'],
-    check: i => { const r = KzInterop.parseTodoTxt(i.text, { today: kzToday() }) || {}; return `${(r.tasks || []).length} tasks`; },
+    check: i => { const r = KzInterop.parseTodoTxt(i.text, { today: kzToday(), tz: kzTz(), parseRepeat: (phrase, opts) => KzTasks.parseRepeat(phrase, opts) }) || {}; return `${(r.tasks || []).length} tasks`; },
     summary: i => `Import todo.txt tasks into ${kzQ(S.boards[i.board_id]?.name || kzInboxBoard()?.name || 'the open board')}` },
   { name:'import_todoist', title:'Import Todoist CSV', kind:'write', run: cmdImportTodoist,
     description:'Create a board from one Todoist project CSV export: sections become columns, plus a Done column. Returns lost: what KanZen could not carry over.',
