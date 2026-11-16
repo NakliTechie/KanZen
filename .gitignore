@@ -34,3 +34,5 @@ scripts/node_modules/
 !.dev.vars.example
 .env*
 !.env.example
+!lib/
+!lib/**

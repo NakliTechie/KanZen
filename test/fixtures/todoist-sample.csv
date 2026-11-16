@@ -1,0 +1,12 @@
+TYPE,CONTENT,DESCRIPTION,PRIORITY,INDENT,AUTHOR,RESPONSIBLE,DATE,DATE_LANG,TIMEZONE,DURATION,DURATION_UNIT,DEADLINE,DEADLINE_LANG
+task,Water the plants @home,,1,1,Sample User (40000001),,every monday,en,Asia/Kolkata,,,,
+task,File the tax return @finance,"Collect Form 16 first.
+Then the bank statements, both accounts.",4,1,Sample User (40000001),,2026-11-20,en,Asia/Kolkata,30,minute,2026-11-30,en
+task,Gather receipts,,3,2,Sample User (40000001),,,en,Asia/Kolkata,,,,
+task,Scan the medical receipts,,2,3,Sample User (40000001),,,en,Asia/Kolkata,,,,
+note,Ask the accountant about 80D.,,,,Sample User (40000001),,2026-11-10 10:15,en,,,,,
+
+section,Errands,,,,,,,,,,,,
+task,Buy groceries,,2,1,Sample User (40000001),Second User (40000002),Nov 18 5pm,en,Asia/Kolkata,,,,
+task,Call the plumber,,1,1,Sample User (40000001),,someday soon,en,Asia/Kolkata,,,,
+task,Renew passport,,3,1,Sample User (40000001),,every! 3 months,en,Asia/Kolkata,,,,
