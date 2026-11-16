@@ -64,6 +64,7 @@ const context = vm.createContext({
   currentBoard: () => state.boards[state.currentBoardId],
   findColumnByCard: (b, id) => b.columns.find(column => column.cardIds.includes(id)),
   stampCard: () => {},
+  now: () => '2026-11-16T10:00:00.000Z',
   logActivity: () => { effects.activity++; },
   scheduleSave: () => { effects.saved++; },
   closeMovePopover: () => {},
@@ -78,6 +79,8 @@ const context = vm.createContext({
     onDecision: callback => { decision = callback; },
   } },
 });
+// applyCardMove sets completedAt through the tasks module's done-column rule, so the real module runs here too.
+vm.runInContext(readFileSync(new URL('../lib/kz-tasks.js', import.meta.url), 'utf8'), context);
 const stamps = html.match(/const BOARD_SAVE_STAMPS = [^;]+;/);
 assert.ok(stamps, 'the save-stamp list exists');
 vm.runInContext(`${stamps[0]}\n${extractFunction('boardRevisionSignature')}\n${html.slice(start, end)}\n` +

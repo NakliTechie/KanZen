@@ -2,7 +2,7 @@
 // splice-lib.mjs — copy the tested lib/ modules into index.html, which stays one file with no build step.
 //   node scripts/splice-lib.mjs          write each lib/ file between its markers
 //   node scripts/splice-lib.mjs --check  exit 1 when index.html differs from lib/
-// Markers sit inside the <script id="kz-lib"> block: /* kz-lib:<name>:begin */ … /* kz-lib:<name>:end */
+// Markers sit at the top of the one inline <script> (the app stays one file, one script): /* kz-lib:<name>:begin */ … /* kz-lib:<name>:end */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';

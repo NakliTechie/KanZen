@@ -45,6 +45,12 @@ const INFRA = {
   kzPumpHostReview: 'stages agent proposals with NakliOS review, one at a time', kzHostDecision: 'applies the person\'s NakliOS review decision',
   restoreBoardState: 'rebuilds a board from serialized state for commands',
   rebuildBoardOrder: 'derives the sorted board list from S.boards', boardSaver: 'autosave wiring', syncSaver: 'sync autosave wiring',
+  kzEnsureInbox: 'creates the Inbox board when the library has none', kzWriteBoard: 'writes a board that is not the open one',
+  kzLoadHabits: 'loads habits.json and the habit log at startup and on a library switch',
+  kzSaveHabitsDoc: 'writes habits.json, or queues it while folder access lapsed', kzAppendHabitLine: 'appends one habit-log line, or queues it',
+  kzMergeHabitLine: 'adds a replayed habit-log line', kzReplayQueue: 'replays writes queued while folder access lapsed',
+  kzWireRail: 'saves pending boards when NakliOS closes the window (beforeClose)',
+  kzMarkReminderFired: 'records a fired reminder so no other window fires it', kzTaskBoard: 'command helper: opens the board a task command acts on',
 };
 // Functions UI handlers may call that are not dispatchers, and why. They must not change state.
 const UI_ONLY = {
@@ -65,6 +71,10 @@ const UI_ONLY = {
   toggleFilterPanel: 'shows the filter panel on phones', scheduleFitHeader: 'refits the header to its width',
   onCardClick: 'opens the card editor unless a long-press just opened "Move to"',
   addChecklistItem: 'edits the card draft', _kzClose: 'in-app prompt and confirm dialog', _kzKey: 'in-app prompt and confirm dialog',
+  addEditorReminder: 'edits the card draft', removeEditorReminder: 'edits the card draft', onReminderKindChange: 'card editor fields',
+  openHabitsPanel: 'opens the habits panel', onHabitScheduleTypeChange: 'habit editor fields', addHabitReminderRow: 'habit editor fields',
+  pickBackfillDay: 'puts a heatmap day in the backfill field', onQuickAddOverlayClick: 'closes quick add',
+  dismissReminderCard: 'hides a reminder card', dismissFatal: 'hides the error surface',
 };
 const PRIMITIVE_CALLS = new Set([
   'scheduleSave','flushSave','markDirty','pushHistory','logActivity','stampCard','markCardDirty','markCardDeleted',
@@ -74,7 +84,7 @@ const PRIMITIVE_CALLS = new Set([
 ]);
 const STORAGE_OBJECTS = new Set(['storage','StorageFS','StorageIDB','StorageNakliOS']);
 const STORAGE_WRITES = /^(save|delete|write|append|remove)/;
-const STATE_KEYS = new Set(['boards','boardOrder','currentBoardId','settings','filter','viewMode','listSort','calMonth','storageMode','history','dirty']);
+const STATE_KEYS = new Set(['boards','boardOrder','currentBoardId','settings','filter','viewMode','listSort','calMonth','storageMode','history','dirty','tasks','habits','habitLog']);
 const MUTATING_METHODS = new Set(['push','pop','shift','unshift','splice','sort','reverse','fill','copyWithin']);
 const UI_EVENTS = new Set(['click','change','input','drop','keydown','keyup','blur','submit','dragstart','dragover','dragleave','dragend','pointerdown','pointerup','pointermove','pointercancel','focus','dblclick','contextmenu']);
 const findings = [];

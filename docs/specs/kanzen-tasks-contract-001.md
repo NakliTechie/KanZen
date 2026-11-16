@@ -16,7 +16,7 @@ functions; it may not change a shape or signature below without updating this fi
 | `lib/kz-queue.js` | reminders builder | `globalThis.KzQueue` |
 | `scripts/test-tasks-*.mjs` | each builder its own | node tests, no browser |
 | `index.html` | UI builder only | everything else |
-| `scripts/splice-lib.mjs` | integrator | copies each `lib/` file into `index.html` between `/* kz-lib:<name>:begin */` and `/* kz-lib:<name>:end */`; `--check` fails on drift |
+| `scripts/splice-lib.mjs` | integrator | copies each `lib/` file into `index.html` between `/* kz-lib:<name>:begin */` and `/* kz-lib:<name>:end */` at the top of the app's one inline script; `--check` fails on drift |
 
 Module rules:
 

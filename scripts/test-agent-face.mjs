@@ -95,8 +95,8 @@ try{
     });
     assert.deepEqual(r.window, r.manifest);
     assert.deepEqual(r.webmcp, r.manifest);
-    assert.equal(r.manifest.length, 60);
-    assert.deepEqual(r.person, ['choose_storage','configure_sync','set_board_sync','set_your_name','install_app','set_agent_channel','approve_proposal','reject_proposal']);
+    assert.equal(r.manifest.length, 82);
+    assert.deepEqual(r.person, ['choose_storage','configure_sync','set_board_sync','set_your_name','install_app','set_agent_channel','approve_proposal','reject_proposal','allow_notifications']);
     for(const name of r.person) assert.ok(!r.window.includes(name), `${name} must not be callable`);
     assert.deepEqual(r.readOnly, r.reads);
     assert.deepEqual(r.consequential, r.destructive);
@@ -110,7 +110,7 @@ try{
 
   await step('read tools answer at once', async () => {
     const boards = await value('list_boards');
-    assert.equal(boards.boards.length, 1);
+    assert.equal(boards.boards.length, 2);
     assert.equal(boards.current_board_id, board.id);
     assert.deepEqual(board.columns.map(c => c.name), ['To Do','In Progress','Done']);
     assert.equal(board.labels.length, 3);
@@ -407,7 +407,7 @@ try{
     assert.deepEqual(untargeted, [], 'a call must name its target tab');
     const listed = await ask({ type: 'kanzen:call', id: 'c1', target: tab, tool: 'list_boards', input: {} });
     assert.equal(listed[0].ok, true);
-    assert.equal(listed[0].result.boards.length, 2);
+    assert.equal(listed[0].result.boards.length, 3);
     const staged = await ask({ type: 'kanzen:call', id: 'c2', target: tab, tool: 'create_card', input: { column_id: todo, title: 'From another tab' }, caller: 'tab-two' });
     assert.equal(staged[0].result.status, 'pending_approval');
     const refused = await ask({ type: 'kanzen:call', id: 'c3', target: tab, tool: 'set_agent_channel', input: {} });
