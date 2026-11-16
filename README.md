@@ -1,7 +1,7 @@
 <h1 align="center">KanZen</h1>
 
 <p align="center">
-  <strong>Kanban boards as plain JSON files in a folder you choose —<br>
+  <strong>Kanban boards, tasks and habits as plain files in a folder you choose —<br>
   with every command also callable by an agent, and nothing applied without your approval.</strong>
 </p>
 
@@ -43,6 +43,20 @@ in Dropbox, iCloud, Syncthing or git and you have multi-device boards without a 
 has what you expect from a kanban tool: labels, members, due dates, checklists, attachments,
 comments, list and calendar views, undo, snapshots and an activity feed.
 
+## Capture a task, repeat it, keep a habit
+
+Press **Q** anywhere and type a line: `Pay rent every month on the 1st at 9 @bills p1`. KanZen
+shows what it understood as chips you can remove, and puts the task in your Inbox board. **Tasks**
+beside the view buttons lists Today (with Overdue), Upcoming, Anytime, Someday, Logbook and Inbox
+across every board. A repeating task stays one card: completing it logs the day and moves its
+date, and one undo puts both back. Reminders fire while any KanZen tab is open, once across tabs;
+anything that came due while it was closed shows on the next open, and an `.ics` export lets your
+calendar remind you with the browser closed.
+
+**🌱** in the header holds habits: daily, chosen weekdays, N a week or N in M days, with a day-end
+hour, skip, pause, streaks, a smoothed score and a year heatmap. Check-ins are lines in
+`habit-log.jsonl` beside your boards. todo.txt and Todoist CSV import, and todo.txt export.
+
 ## Work on a board with other people
 
 Put the board folder in git and turn on **team mode** in Board settings. The board splits into
@@ -57,17 +71,17 @@ travels in the `#fragment`, which browsers never send to a server.
 
 ## Let an agent work the board
 
-Everything you can do in KanZen is also a tool: 60 of them, the same commands the UI runs. An
+Everything you can do in KanZen is also a tool: 82 of them, the same commands the UI runs. An
 assistant in the browser reaches them through WebMCP; a script in the tab uses `window.kanzen`.
 Agents can read every board and change the view. Any change to your data arrives as a proposal
 under **🤖** in the header, and applies only when you approve it. Destructive proposals take a
 safety snapshot first. The activity feed marks each agent change with the door it came through.
-
 Choosing where boards live, sync credentials, your name and approving proposals stay with you.
 
 ## Commands
 
 ```
+Q                    quick-add a task to the Inbox (dates, "every …", #board /column @label p1–p4 {deadline})
 N                    new card in the first column
 E  or  Enter         edit the focused card
 /                    search titles and descriptions
@@ -88,9 +102,10 @@ reports what happened.
 cd scripts && npm ci && npx playwright install --only-shell chromium && cd ..
 node scripts/lint-agent-face.mjs        # every change goes through a declared command
 node scripts/test-lint-agent-face.mjs   # the lint catches six planted faults
-node scripts/test-agent-face.mjs        # 16 checks: every door, approval, undo, reload
+node scripts/test-agent-face.mjs        # 17 checks: every door, approval, undo, reload
 node scripts/test-responsive.mjs        # 10 checks at 1280, 1024, 800 and 375 px
 node scripts/test-naklios-storage.mjs && node scripts/test-team-merge.mjs && node scripts/test-card-review.mjs
+cd scripts && npm test                  # all of the above plus the tasks and habits modules (255 checks)
 ```
 
 The lint fails when a button changes data without a command, or when a command is missing from

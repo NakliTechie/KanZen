@@ -74,3 +74,17 @@ Palettes come from the [Rangrez](https://github.com/NakliTechie/rangrez) library
 **Responsive layout** (2026-10-04)
 - Header folds buttons into ⋯ when they do not fit; phones get two header rows, a Filters panel, one column per screen with snap scrolling, full-screen dialogs and bottom-sheet menus
 - Touch: 40px targets, long-press "Move to", ‹ › column reorder, and a Column picker in the card editor
+
+**Tasks and habits** (2026-11-16; scope and checks in [`docs/specs/kanzen-tasks-parity-001.md`](docs/specs/kanzen-tasks-parity-001.md))
+- Quick add (`Q`): natural dates ("tomorrow 3pm", "next Fri", "in 3 days"), repeat phrases ("every weekday", "every 2 weeks", "every 3rd of the month", "every! 3 months"), `#board`, `/column`, `@label`, `p1`–`p4`, `{deadline}`, `someday`; removable preview chips. Captures go to the Inbox board, created on first run
+- Task fields on any card: start date and time, due time, someday, repeat (RRULE with a floating local time, fixed or after completion, optional checklist reset), reminders (a time, or minutes before due; 09:00 when no due time), subtask of (one level)
+- A repeating task is one card: complete logs the occurrence and advances the date, skip logs and advances, end series completes it; one undo reverses each. Moving a card into or out of the Done column sets or clears its completed time
+- Tasks mode across every board: Today (with Overdue and Reschedule), Upcoming (14 days, repeat occurrences included), Anytime, Someday, Logbook, Inbox
+- The calendar view shows start dates and repeat occurrences beside due dates
+- Reminders while any KanZen tab is open: one leader tab through Web Locks, a system notification when allowed, an in-app card otherwise, Snooze 10 min / 1 hour / tomorrow, a "missed while closed" list on open; fired reminders are logged in the board file and shared across tabs
+- Habits panel (🌱): daily, chosen weekdays, N a week, N in M days; day-end hour; check in, backfill or clear any past day from the heatmap; skip and pause; current and best streak, a smoothed score (Loop's published formula, reimplemented), completion rates, a year heatmap in SVG. Stored as `habits.json` plus an append-only `habit-log.jsonl`
+- Writes that fail because folder access lapsed wait in IndexedDB (a ⏳ pill counts them) and replay when access returns
+- Import: todo.txt (`rec:` repeats, `t:` start dates) and Todoist project CSV (the lost list says what did not carry over: completed tasks, repeat start anchors, nesting beyond one level). Export: todo.txt, `.ics` (VTODO with VALARM, floating times, UTC alarm times), and CSV gains start, times, repeat, completed, someday and parent columns
+- Agent face: 22 more tools (82 in all) and seven NakliOS commands, `task.capture`, `task.complete`, `task.defer`, `task.snooze`, `task.query`, `habit.list`, `habit.checkin`
+- Inside NakliOS: follows the desktop theme, sets the window title, saves before the window closes, and publishes two desktop widgets (today's tasks, habits)
+- Size: `index.html` grows from 447,618 to 922,215 bytes; the vendored date libraries (chrono-node 2.10.3 English, rrule-temporal 2.2.8 with its embedded Temporal polyfill) are 232,630 bytes of that

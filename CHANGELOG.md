@@ -5,11 +5,17 @@ All notable changes to KanZen. Format: [Keep a Changelog](https://keepachangelog
 ## [Unreleased]
 
 ### Added
+- **Tasks and habits (v1).** Quick add with natural dates and repeat phrases, task fields on cards (start, times, someday, repeat, reminders, subtasks), one-card repeating tasks with logged completions and one-step undo, Tasks mode (Today, Upcoming, Anytime, Someday, Logbook, Inbox) across every board, reminders while a tab is open with snooze and a missed list, a habits panel with streaks, score and a year heatmap, todo.txt and Todoist CSV import, todo.txt and `.ics` export, and seven NakliOS commands (`task.*`, `habit.*`). Scope and the check behind each item: `docs/specs/kanzen-tasks-parity-001.md`.
+- Desktop widgets inside NakliOS: today's tasks and habits.
+- Gates: `scripts/test-tasks-{dates,habits,reminders,interop,queue}.mjs` (255 checks) and `scripts/splice-lib.mjs --check`, all in `npm test`.
 - **NakliOS commands.** `commands.json` declares six commands (`board.list`, `board.read`, `card.list`, `card.add`, `card.move`, `proposal.status`). Inside NakliOS the voice assistant and Anvil reach them through the host's grant, which opens KanZen minimized when it is closed. They take board, column and card names and run the same tools as the other doors, so `card.add` and `card.move` stay proposals and return a `proposal_id`. Standalone KanZen does not register them.
 - Gate: `scripts/test-commands.mjs` checks `commands.json` against the host's rules and its handlers, then runs commands through a stand-in host.
 
 ### Changed
-- The inlined NakliOS SDK is current, which brings `experimental_commands`.
+- The inlined NakliOS SDK is current (canonical ver 2, refreshed 2026-11-16), which brings `experimental_commands` and `experimental_widgets`.
+- Inside NakliOS, KanZen follows the desktop theme while its own palette is Default, sets its window title, and saves before NakliOS closes it.
+- A new library gets an Inbox board beside the starter board, and an existing library gains one on first open.
+- Header buttons fold in a new order so Undo and Redo stay visible longest.
 
 ## [1.0.0] — 2026-10-04
 
