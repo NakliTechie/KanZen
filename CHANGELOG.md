@@ -12,6 +12,7 @@ All notable changes to KanZen. Format: [Keep a Changelog](https://keepachangelog
 - Gate: `scripts/test-commands.mjs` checks `commands.json` against the host's rules and its handlers, then runs commands through a stand-in host.
 
 ### Changed
+- Inside NakliOS, the person's own card moves apply at once instead of waiting in NakliOS review. Review now holds agent proposals only, as the NakliOS app contract says. Gate: the NakliOS step in `scripts/test-agent-face.mjs` and `scripts/test-card-review.mjs`.
 - The inlined NakliOS SDK is current (canonical ver 2, refreshed 2026-11-16), which brings `experimental_commands` and `experimental_widgets`.
 - Inside NakliOS, KanZen follows the desktop theme while its own palette is Default, sets its window title, and saves before NakliOS closes it.
 - A new library gets an Inbox board beside the starter board, and an existing library gains one on first open.

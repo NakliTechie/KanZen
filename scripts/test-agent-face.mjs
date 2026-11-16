@@ -372,6 +372,30 @@ try{
     await clickProposal(fallback.proposal_id, 'Approve');
     assert.equal((await value('get_board')).name, 'Old host');
     await page.evaluate(() => kzUi('rename_board', { name: 'Main board' }));
+    // The person's own edits never go to NakliOS review; only agent commands stage (NakliOS app contract).
+    await page.evaluate(() => { window.__stageMode = 'accept'; window.__staged = []; KZ_AGENT.hostUnsupported = false; });
+    const where = async () => (await value('get_board')).columns.findIndex(c => c.card_ids.includes(cardId));
+    const before = await where();
+    const target = (await value('get_board')).columns[(before + 1) % 3].id;
+    await page.evaluate(([card_id, column_id]) => moveCardTo(card_id, column_id), [cardId, target]);
+    assert.equal((await value('get_board')).columns[(before + 1) % 3].card_ids.includes(cardId), true, 'a person\'s card move lands at once');
+    assert.equal((await page.evaluate(() => window.__staged)).length, 0, 'a person\'s card move queues no NakliOS proposal');
+    await page.evaluate(() => kzUi('rename_board', { name: 'Renamed by Asha' }));
+    assert.equal((await value('get_board')).name, 'Renamed by Asha', 'a person\'s rename lands at once');
+    assert.equal((await page.evaluate(() => window.__staged)).length, 0, 'a person\'s rename queues no NakliOS proposal');
+    await page.keyboard.press('ControlOrMeta+z');
+    await page.keyboard.press('ControlOrMeta+z');
+    assert.equal((await value('get_board')).name, 'Main board', 'undo reverts the person\'s rename');
+    assert.equal(await where(), before, 'undo reverts the person\'s card move');
+    const agentMove = await value('move_card', { card_id: cardId, column_id: target });
+    assert.equal(agentMove.status, 'pending_approval', 'an agent move still waits for review');
+    const agentStaged = await page.evaluate(() => window.__staged);
+    assert.equal(agentStaged.length, 1);
+    assert.equal(agentStaged[0].tool, 'kanzen.agent');
+    assert.equal(agentStaged[0].diff.tool, 'move_card');
+    assert.equal(await where(), before, 'the staged agent move changes nothing yet');
+    assert.deepEqual(await page.evaluate(() => kzHostDecision('discard', 'host_1')), { ok: true });
+    assert.equal(await where(), before);
     await page.evaluate(() => { naklios.capabilities.review = false; KZ_AGENT.hostUnsupported = false; });
   });
 

@@ -32,8 +32,8 @@ The full feature list. The [README](README.md) is the short version.
 - Inside NakliOS, explicitly switch between this browser, the mounted Folder,
   and encrypted Crate. Each is a separate board library; switching never
   copies, merges, or deletes boards.
-- Inside NakliOS, card moves stage a before/after location for host review.
-  Commit moves the card once; discard and stale-board rejection leave it in place.
+- Inside NakliOS, only agent proposals wait in the host's review; the person's own
+  edits, card moves included, apply at once with the normal undo.
 - Auto-save every 5 s on changes; immediate save on destructive actions
 - Per-board and full-state JSON export / import (merge or replace)
 - CSV and Markdown export
