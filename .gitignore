@@ -25,6 +25,8 @@ scripts/node_modules/
 !.github/**
 !test/
 !test/**
+!docs/
+!docs/**
 
 # wrangler files
 .wrangler
