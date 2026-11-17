@@ -12,6 +12,7 @@ All notable changes to KanZen. Format: [Keep a Changelog](https://keepachangelog
 - Gate: `scripts/test-commands.mjs` checks `commands.json` against the host's rules and its handlers, then runs commands through a stand-in host.
 
 ### Changed
+- Inside NakliOS, an agent's creates and edits apply at once, with normal undo, even while a review card waits; they return `{status:"applied", ...}`. Only deletions wait in NakliOS review: destructive tools, a write that clears a field holding a value (description, due date, labels, members, checklist items, task dates, repeat, reminders, parent, estimate), clearing or taking back a habit check-in, agent undo and redo, and batches holding any of these. Before, every agent write waited and queued behind the one card NakliOS holds, which stalled agents. Standalone KanZen still asks before every agent write. Rule: `kzHostNeedsReview` in `index.html`. Gate: the NakliOS steps in `scripts/test-agent-face.mjs` and `scripts/test-commands.mjs`.
 - Inside NakliOS, the person's own card moves apply at once instead of waiting in NakliOS review. Review now holds agent proposals only, as the NakliOS app contract says. Gate: the NakliOS step in `scripts/test-agent-face.mjs` and `scripts/test-card-review.mjs`.
 - The inlined NakliOS SDK is current (canonical ver 2, refreshed 2026-11-16), which brings `experimental_commands` and `experimental_widgets`.
 - Inside NakliOS, KanZen follows the desktop theme while its own palette is Default, sets its window title, and saves before NakliOS closes it.

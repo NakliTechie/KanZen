@@ -327,7 +327,7 @@ try{
     assert.deepEqual(events, ['person:set_view', 'person:set_view']);
   });
 
-  await step('inside NakliOS, proposals wait in its review one at a time; an older host falls back', async () => {
+  await step('inside NakliOS, deletions wait in its review one at a time, creates and edits apply at once; an older host falls back', async () => {
     await page.evaluate(() => {
       window.__staged = [];
       window.__stageMode = 'accept';
@@ -339,13 +339,22 @@ try{
         return { proposal_id: 'host_' + window.__staged.length };
       };
     });
-    const first = await value('create_card', { column_id: todo, title: 'Reviewed in NakliOS' });
-    const second = await value('create_card', { column_id: todo, title: 'Discarded in NakliOS' });
+    // Creates and edits apply at once inside NakliOS (kzHostNeedsReview).
+    const made = await value('create_card', { column_id: todo, title: 'Reviewed in NakliOS' });
+    assert.equal(made.status, 'applied', JSON.stringify(made));
+    const kept = await value('create_card', { column_id: todo, title: 'Discarded in NakliOS' });
+    assert.equal(kept.status, 'applied');
+    assert.equal((await page.evaluate(() => window.__staged)).length, 0, 'creates queue no review card');
+    // Deletions stage, one pending change per app frame.
+    const first = await value('delete_card', { card_id: made.card_id });
+    const second = await value('delete_card', { card_id: kept.card_id });
     let staged = await page.evaluate(() => window.__staged);
     assert.equal(staged.length, 1, 'one pending change per app frame');
     assert.equal(staged[0].tool, 'kanzen.agent');
     assert.equal(staged[0].diff.kind, 'agent');
     assert.match(staged[0].diff.summary, /Reviewed in NakliOS/);
+    const meanwhile = await value('update_card', { card_id: kept.card_id, description: 'edited while a card waits' });
+    assert.equal(meanwhile.status, 'applied', 'an edit applies while a deletion waits');
     assert.equal((await value('get_proposal', { proposal_id: first.proposal_id })).review, 'naklios');
     await page.evaluate(id => approveProposal(id), first.proposal_id);
     assert.equal((await value('get_proposal', { proposal_id: first.proposal_id })).status, 'pending', 'KanZen\'s own approve leaves NakliOS-held proposals alone');
@@ -355,23 +364,22 @@ try{
     await page.evaluate(() => closeModal());
     assert.deepEqual(await page.evaluate(() => kzHostDecision('commit', 'host_1')), { ok: true });
     assert.equal((await value('get_proposal', { proposal_id: first.proposal_id })).status, 'applied');
-    assert.ok((await value('search_cards', { query: 'Reviewed in NakliOS' })).total === 1);
+    assert.equal((await value('search_cards', { query: 'Reviewed in NakliOS' })).total, 0);
     staged = await page.evaluate(() => window.__staged);
     assert.equal(staged.length, 2, 'the next proposal goes to NakliOS after a decision');
     assert.equal(await page.evaluate(() => kzHostDecision('commit', 'host_unknown')), undefined, 'card moves and unknown ids pass through');
     assert.deepEqual(await page.evaluate(() => kzHostDecision('discard', 'host_2')), { ok: true });
     assert.equal((await value('get_proposal', { proposal_id: second.proposal_id })).status, 'rejected');
-    assert.equal((await value('search_cards', { query: 'Discarded in NakliOS' })).total, 0);
+    assert.equal((await value('search_cards', { query: 'Discarded in NakliOS' })).total, 1, 'a discarded deletion keeps the card');
     await page.evaluate(() => { window.__stageMode = 'poisoned'; });
-    const poisoned = await value('rename_board', { name: 'Same again' });
+    const poisoned = await value('delete_card', { card_id: kept.card_id });
     assert.equal((await value('get_proposal', { proposal_id: poisoned.proposal_id })).status, 'rejected');
     await page.evaluate(() => { window.__stageMode = 'old'; });
-    const fallback = await value('rename_board', { name: 'Old host' });
+    const fallback = await value('delete_card', { card_id: kept.card_id });
     const view = await value('get_proposal', { proposal_id: fallback.proposal_id });
     assert.equal(view.review, 'kanzen', 'an older host leaves the proposal in KanZen\'s dialog');
     await clickProposal(fallback.proposal_id, 'Approve');
-    assert.equal((await value('get_board')).name, 'Old host');
-    await page.evaluate(() => kzUi('rename_board', { name: 'Main board' }));
+    assert.equal((await value('search_cards', { query: 'Discarded in NakliOS' })).total, 0);
     // The person's own edits never go to NakliOS review; only agent commands stage (NakliOS app contract).
     await page.evaluate(() => { window.__stageMode = 'accept'; window.__staged = []; KZ_AGENT.hostUnsupported = false; });
     const where = async () => (await value('get_board')).columns.findIndex(c => c.card_ids.includes(cardId));
@@ -388,14 +396,15 @@ try{
     assert.equal((await value('get_board')).name, 'Main board', 'undo reverts the person\'s rename');
     assert.equal(await where(), before, 'undo reverts the person\'s card move');
     const agentMove = await value('move_card', { card_id: cardId, column_id: target });
-    assert.equal(agentMove.status, 'pending_approval', 'an agent move still waits for review');
-    const agentStaged = await page.evaluate(() => window.__staged);
-    assert.equal(agentStaged.length, 1);
-    assert.equal(agentStaged[0].tool, 'kanzen.agent');
-    assert.equal(agentStaged[0].diff.tool, 'move_card');
-    assert.equal(await where(), before, 'the staged agent move changes nothing yet');
+    assert.equal(agentMove.status, 'applied', 'an agent move applies at once');
+    assert.equal((await page.evaluate(() => window.__staged)).length, 0, 'an agent move queues no NakliOS proposal');
+    assert.equal(await where(), (before + 1) % 3);
+    const agentUndo = await value('undo');
+    assert.equal(agentUndo.status, 'pending_approval', 'an agent undo waits, since it can remove what the last change added');
     assert.deepEqual(await page.evaluate(() => kzHostDecision('discard', 'host_1')), { ok: true });
-    assert.equal(await where(), before);
+    const home = (await value('get_board')).columns[before].id;
+    await page.evaluate(([card_id, column_id]) => moveCardTo(card_id, column_id), [cardId, home]);
+    assert.equal(await where(), before, 'the person moves the card back');
     await page.evaluate(() => { naklios.capabilities.review = false; KZ_AGENT.hostUnsupported = false; });
   });
 

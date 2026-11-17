@@ -73,6 +73,7 @@ const hostPage = `<!doctype html><iframe id="app" src="/index.html" style="width
     send({ type:'naklios:commands:invoke', invokeId, name, args: structuredClone(args), caller });
   });
   window.host.commit = proposal_id => send({ type:'naklios:review:commit', proposal_id });
+  window.host.discard = proposal_id => send({ type:'naklios:review:discard', proposal_id });
 </script>`;
 const requests = [];
 const server = createServer(async (req, res) => {
@@ -147,51 +148,66 @@ try{
     assert.equal(listed.cards.every(card => card.column === first.name), true);
   });
 
-  let proposalId;
-  await step('card.add stages a proposal, returns its id, and applies on the host\'s commit', async () => {
+  // Inside NakliOS only deletions wait for review (kzHostNeedsReview): creates and edits apply at once.
+  await step('card.add applies at once inside NakliOS and queues no review card', async () => {
     const before = (await result('card.list', { text: 'Call the plumber' })).total;
-    const staged = await result('card.add', { title: 'Call the plumber' });
-    assert.equal(staged.status, 'pending_approval');
-    assert.match(staged.proposal_id, /^prop_/);
-    assert.match(staged.message, /proposal\.status/);
-    proposalId = staged.proposal_id;
-    await page.waitForFunction(() => window.host.staged.length === 1);
-    const hostProposal = await page.evaluate(() => window.host.staged[0]);
-    assert.equal(hostProposal.tool, 'kanzen.agent');
-    assert.equal(hostProposal.diff.door, 'commands');
-    assert.equal(hostProposal.diff.caller, 'voice-assistant', 'the host\'s caller reaches review');
-    assert.equal((await result('card.list', { text: 'Call the plumber' })).total, before, 'nothing changes before approval');
-    assert.equal((await result('proposal.status', { proposal_id: proposalId })).status, 'pending');
-    assert.deepEqual((await result('proposal.status')).proposals.map(p => p.proposal_id), [proposalId]);
-    await page.evaluate(id => window.host.commit(id), hostProposal.proposal_id);
-    await page.waitForFunction(() => window.host.applied.length === 1);
-    assert.equal((await page.evaluate(() => window.host.applied[0])).ok, true);
-    const applied = await result('proposal.status', { proposal_id: proposalId });
-    assert.equal(applied.status, 'applied');
+    const added = await result('card.add', { title: 'Call the plumber' });
+    assert.equal(added.status, 'applied', JSON.stringify(added));
+    assert.equal(await page.evaluate(() => window.host.staged.length), 0, 'no review card');
     const found = await result('card.list', { text: 'Call the plumber' });
     assert.equal(found.total, before + 1);
     assert.equal(found.cards[0].column, first.name, 'the first column by default');
   });
 
   await step('card.move finds the card by part of its title and the column by name', async () => {
-    const staged = await result('card.move', { card: 'plumber', column: last.name.toLowerCase() });
-    assert.equal(staged.status, 'pending_approval');
-    await page.waitForFunction(() => window.host.staged.length === 2);
-    await page.evaluate(() => window.host.commit(window.host.staged[1].proposal_id));
-    await page.waitForFunction(() => window.host.applied.length === 2);
+    const moved = await result('card.move', { card: 'plumber', column: last.name.toLowerCase() });
+    assert.equal(moved.status, 'applied');
     assert.equal((await result('card.list', { text: 'plumber' })).cards[0].column, last.name);
+  });
+
+  await step('a delete waits in NakliOS review while later creates and edits still apply', async () => {
+    const card = (await result('card.list', { text: 'plumber' })).cards[0];
+    const staged = await app.evaluate(id => window.kanzen.call('delete_card', { card_id: id }, { caller: 'voice-assistant' }), card.id);
+    assert.equal(staged.status, 'pending_approval');
+    await page.waitForFunction(() => window.host.staged.length === 1);
+    const hostProposal = await page.evaluate(() => window.host.staged[0]);
+    assert.equal(hostProposal.tool, 'kanzen.agent');
+    assert.equal(hostProposal.diff.destructive, true);
+    assert.equal(hostProposal.diff.caller, 'voice-assistant', 'the caller reaches review');
+    assert.equal((await result('proposal.status', { proposal_id: staged.proposal_id })).status, 'pending');
+    assert.equal((await result('card.list', { text: 'plumber' })).total, 1, 'nothing deleted before approval');
+    // While the card waits, another write applies at once.
+    assert.equal((await result('card.add', { title: 'Buy washers' })).status, 'applied');
+    assert.equal((await result('card.list', { text: 'Buy washers' })).total, 1);
+    await page.evaluate(id => window.host.commit(id), hostProposal.proposal_id);
+    await page.waitForFunction(() => window.host.applied.length === 1);
+    assert.equal((await page.evaluate(() => window.host.applied[0])).ok, true);
+    assert.equal((await result('proposal.status', { proposal_id: staged.proposal_id })).status, 'applied');
+    assert.equal((await result('card.list', { text: 'plumber' })).total, 0);
+  });
+
+  await step('clearing a field waits for review; editing one does not', async () => {
+    const card = (await result('card.list', { text: 'Buy washers' })).cards[0];
+    const edit = await app.evaluate(id => window.kanzen.call('update_card', { card_id: id, description: 'Size 15 mm', due_date: '2026-12-01' }), card.id);
+    assert.equal(edit.status, 'applied', JSON.stringify(edit));
+    const count = await page.evaluate(() => window.host.staged.length);
+    const clear = await app.evaluate(id => window.kanzen.call('update_card', { card_id: id, description: '' }), card.id);
+    assert.equal(clear.status, 'pending_approval');
+    await page.waitForFunction(count => window.host.staged.length === count + 1, count);
+    const kept = await app.evaluate(id => S.boards[S.currentBoardId].cards[id].description, card.id);
+    assert.equal(kept, 'Size 15 mm', 'the description stays until approved');
+    const batch = await app.evaluate(id => window.kanzen.call('apply_changes', { operations: [
+      { tool: 'update_card', input: { card_id: id, title: 'Buy 15 mm washers' } },
+      { tool: 'update_card', input: { card_id: id, due_date: null } },
+    ] }), card.id);
+    assert.equal(batch.status, 'pending_approval', 'a batch that clears a field waits');
+    await page.evaluate(() => window.host.discard(window.host.staged.at(-1).proposal_id));
   });
 
   await step('a name that fits nothing or several rows is an error, logged on the door', async () => {
     assert.match((await invoke('card.move', { card: 'no such card', column: last.name })).error, /No card on board/);
-    const titles = ['Twin alpha', 'Twin beta'];
-    for(const title of titles){
-      const count = await page.evaluate(() => window.host.staged.length);
-      const { proposal_id } = await result('card.add', { title });
-      await page.waitForFunction(count => window.host.staged.length === count + 1, count);
-      await page.evaluate(() => window.host.commit(window.host.staged.at(-1).proposal_id));
-      await page.waitForFunction(count => window.host.applied.length === count + 1, count);
-      assert.ok(proposal_id);
+    for(const title of ['Twin alpha', 'Twin beta']){
+      assert.equal((await result('card.add', { title })).status, 'applied');
     }
     assert.match((await invoke('card.move', { card: 'twin', column: last.name })).error, /More than one card/);
     const log = await app.evaluate(() => KZ_AGENT.calls.filter(call => call.door === 'commands' && call.outcome === 'error').map(call => call.detail));
